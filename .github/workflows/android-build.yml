@@ -30,3 +30,10 @@ jobs:
       - name: Build debug APK
         working-directory: SPlay
         run: bash ./gradlew :app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPlay-SMB-debug
+          path: SPlay/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
