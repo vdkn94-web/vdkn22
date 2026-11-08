@@ -29,4 +29,4 @@ jobs:
 
       - name: Build debug APK
         working-directory: SPlay
-        run: ./gradlew :app:assembleDebug
+        run: bash ./gradlew :app:assembleDebug
