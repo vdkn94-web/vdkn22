@@ -168,6 +168,7 @@ private fun SPlayApp() {
     var errorText by remember { mutableStateOf<String?>(null) }
     var nowPlaying by remember { mutableStateOf<RemoteEntry?>(null) }
     var videoMode by remember { mutableStateOf(false) }
+    var playbackPlaying by remember { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
 
     val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800")) }
@@ -198,11 +199,13 @@ private fun SPlayApp() {
         errorText = null
         scope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val rootEntries = withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
+                    browser.list("")
                 }
+                entries = rootEntries
+                currentPath = ""
                 connected = true
-                refresh("")
             } catch (e: Exception) {
                 connected = false
                 errorText = e.message ?: "Не удалось подключиться к SMB"
@@ -228,6 +231,7 @@ private fun SPlayApp() {
             nowPlaying = entry
             videoMode = isVideo(entry.name)
             mediaPlayer.play()
+            playbackPlaying = true
         } catch (e: Exception) {
             errorText = "VLC не смог открыть файл: ${e.message ?: "ошибка воспроизведения"}"
         }
@@ -248,6 +252,7 @@ private fun SPlayApp() {
             mediaPlayer.stop()
             nowPlaying = null
             videoMode = false
+            playbackPlaying = false
         } else {
             val parent = currentPath.substringBeforeLast('\\', "")
             refresh(parent)
@@ -345,12 +350,14 @@ private fun SPlayApp() {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Button(onClick = {
-                            if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play()
-                        }) { Text(if (mediaPlayer.isPlaying) "Пауза" else "Продолжить") }
+                            if (playbackPlaying) mediaPlayer.pause() else mediaPlayer.play()
+                            playbackPlaying = !playbackPlaying
+                        }) { Text(if (playbackPlaying) "Пауза" else "Продолжить") }
                         Button(onClick = {
                             mediaPlayer.stop()
                             nowPlaying = null
                             videoMode = false
+                            playbackPlaying = false
                         }) { Text("Стоп") }
                     }
                 }
