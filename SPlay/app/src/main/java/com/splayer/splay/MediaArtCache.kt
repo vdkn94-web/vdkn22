@@ -2,6 +2,7 @@ package com.splayer.splay
 
 import android.content.Context
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
@@ -25,10 +26,9 @@ data class MediaArtResult(
  */
 class MediaArtCache(
     context: Context,
-    private val copyRemoteFile: (String, File) -> Unit
+    private val copyRemoteToPipe: (String, String) -> Unit
 ) {
     private val cacheDir = File(context.cacheDir, "media-art").apply { mkdirs() }
-    private val tempDir = File(context.cacheDir, "media-art-tmp").apply { mkdirs() }
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
     private val executor = ThreadPoolExecutor(
         2, 2, 0L, TimeUnit.MILLISECONDS,
@@ -54,31 +54,35 @@ class MediaArtCache(
         if (!inFlight.add(key)) return true
         try {
             executor.execute {
-                val source = File(tempDir, "$key.media")
                 val output = File(cacheDir, "$key.jpg")
                 var result = MediaArtResult(null)
                 try {
-                    copyRemoteFile(entryPath, source)
                     if (audio) {
-                        val probe = FFprobeKit.execute(
-                            "-v error -show_entries format_tags=title,artist,album:stream_tags=title,artist,album -of default=noprint_wrappers=1:nokey=0 ${quote(source.absolutePath)}"
-                        )
+                        val probe = withPipe(entryPath) { pipe ->
+                            FFprobeKit.execute(
+                                "-v error -show_entries format_tags=title,artist,album:stream_tags=title,artist,album -of default=noprint_wrappers=1:nokey=0 ${quote(pipe)}"
+                            )
+                        }
                         val tags = parseTags(probe.output ?: "")
                         metadataFile.writeText(tags.entries.joinToString("\n") { "${it.key}=${it.value}" })
                         val art = if (output.isFile && output.length() > 0L) {
                             output.setLastModified(System.currentTimeMillis())
                             output
                         } else {
-                            val extracted = FFmpegKit.execute(
-                                "-y -i ${quote(source.absolutePath)} -map 0:v:0 -frames:v 1 -vf scale=640:-2 -q:v 3 ${quote(output.absolutePath)}"
-                            )
+                            val extracted = withPipe(entryPath) { pipe ->
+                                FFmpegKit.execute(
+                                    "-y -i ${quote(pipe)} -map 0:v:0 -frames:v 1 -vf scale=640:-2 -q:v 3 ${quote(output.absolutePath)}"
+                                )
+                            }
                             if (ReturnCode.isSuccess(extracted.returnCode) && output.isFile && output.length() > 0L) output else null
                         }
                         result = MediaArtResult(art, tags["title"], tags["artist"], tags["album"])
                     } else {
-                        val extracted = FFmpegKit.execute(
-                            "-y -ss 7 -i ${quote(source.absolutePath)} -frames:v 1 -vf scale=480:-2 -q:v 3 ${quote(output.absolutePath)}"
-                        )
+                        val extracted = withPipe(entryPath) { pipe ->
+                            FFmpegKit.execute(
+                                "-y -i ${quote(pipe)} -ss 7 -frames:v 1 -vf scale=480:-2 -q:v 3 ${quote(output.absolutePath)}"
+                            )
+                        }
                         val thumb = if (ReturnCode.isSuccess(extracted.returnCode) && output.isFile && output.length() > 0L) output else null
                         result = MediaArtResult(thumb)
                     }
@@ -86,7 +90,6 @@ class MediaArtCache(
                 } catch (_: Exception) {
                     if (output.length() == 0L) output.delete()
                 } finally {
-                    source.delete()
                     inFlight.remove(key)
                 }
                 callback(result)
@@ -95,6 +98,22 @@ class MediaArtCache(
         } catch (_: java.util.concurrent.RejectedExecutionException) {
             inFlight.remove(key)
             return false
+        }
+    }
+
+    private fun <T> withPipe(entryPath: String, operation: (String) -> T): T {
+        val pipe = FFmpegKitConfig.registerNewFFmpegPipe(context)
+            ?: error("Не удалось создать FFmpeg pipe")
+        val writer = Thread {
+            try { copyRemoteToPipe(entryPath, pipe) } catch (_: Exception) { }
+        }.apply { isDaemon = true; start() }
+        try {
+            return operation(pipe)
+        } finally {
+            writer.interrupt()
+            try { writer.join(250) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+            FFmpegKitConfig.closeFFmpegPipe(pipe)
+            try { writer.join(750) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
         }
     }
 
