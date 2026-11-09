@@ -371,11 +371,47 @@ private fun SPlayApp() {
                 }
             }
         } else {
-            Column(Modifier.fillMaxSize().padding(horizontal = 34.dp, vertical = 22.dp)) {
+            Row(Modifier.fillMaxSize()) {
+                if (connected) {
+                    Column(
+                        Modifier.width(218.dp).fillMaxSize().background(Color(0xFF111111)).padding(horizontal = 14.dp, vertical = 24.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp, bottom = 30.dp)) {
+                            Text("S", color = AccentColor, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                            Text("Play", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 14.dp, bottom = 10.dp))
+                        SidebarItem("⌂", "Обзор", mediaSection == "Все") { mediaSection = "Все" }
+                        SidebarItem("▶", "Видео", mediaSection == "Видео") { mediaSection = "Видео" }
+                        SidebarItem("♫", "Аудио", mediaSection == "Музыка") { mediaSection = "Музыка" }
+                        Spacer(Modifier.weight(1f))
+                        Surface(
+                            color = PanelColor,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("SMB-СЕРВЕР", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(5.dp))
+                                Text(host, color = Color.White, fontSize = 13.sp, maxLines = 1)
+                                Text(shareName, color = Color.LightGray, fontSize = 11.sp, maxLines = 1)
+                            }
+                        }
+                        SidebarItem("↻", "Отключиться", false) {
+                            scope.launch(Dispatchers.IO) { browser.disconnect() }
+                            connected = false
+                            entries = emptyList()
+                            hasMoreEntries = false
+                            currentPath = ""
+                            searchQuery = ""
+                        }
+                    }
+                }
+                Column(Modifier.weight(1f).fillMaxSize().padding(horizontal = 30.dp, vertical = 22.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("SPlay", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp)
+                    Text(if (connected) when (mediaSection) { "Видео" -> "Видео"; "Музыка" -> "Аудио"; else -> "Обзор" } else "SPlay", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
                     Spacer(Modifier.width(12.dp))
-                    Text("MEDIA PLAYER", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    if (!connected) Text("MEDIA PLAYER", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Spacer(Modifier.weight(1f))
                     if (connected) {
                         Text("● ПОДКЛЮЧЕНО", color = Color(0xFF8BCB9A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -466,7 +502,25 @@ private fun SPlayApp() {
                     Spacer(Modifier.height(8.dp))
                     Text(errorText!!, color = Color(0xFFFF8D8D), fontSize = 13.sp, maxLines = 2)
                 }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun SidebarItem(icon: String, title: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (selected) Color(0xFF332416) else Color.Transparent,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable(onClick = onClick).focusable()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, color = if (selected) AccentColor else Color.LightGray, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
+            Text(title, color = if (selected) Color.White else Color(0xFFBDBDBD), fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
         }
     }
 }
