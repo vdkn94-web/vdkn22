@@ -422,8 +422,8 @@ private fun SPlayApp() {
         if (sidebarExpanded) {
             delay(60)
             sidebarFocusRequester.requestFocus()
-        } else if (connected && nowPlaying == null) {
-            delay(60)
+        } else if (connected && nowPlaying == null && !busy && entries.isNotEmpty()) {
+            delay(100)
             contentFocusRequester.requestFocus()
         }
     }
@@ -545,7 +545,7 @@ private fun SPlayApp() {
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     sidebarExpanded = false
-                                    scope.launch { delay(100); contentFocusRequester.requestFocus() }
+                                    scope.launch { delay(140); contentFocusRequester.requestFocus() }
                                     true
                                 } else false
                             }
@@ -565,8 +565,6 @@ private fun SPlayApp() {
                 }
                 Column(
                     Modifier.weight(1f).fillMaxSize().padding(horizontal = 30.dp, vertical = 22.dp)
-                        .focusRequester(contentFocusRequester)
-                        .focusable()
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && connected && !sidebarExpanded) {
                                 sidebarExpanded = true
@@ -639,14 +637,14 @@ private fun SPlayApp() {
                     } else if (mediaSection == "Видео" && !showSearch) {
                         LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 210.dp), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             gridItems(visibleEntries, key = { it.path }) { entry ->
-                                VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) },
+                                VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) }, modifier = if (entry.path == visibleEntries.firstOrNull()?.path) Modifier.focusRequester(contentFocusRequester) else Modifier,
                                     onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
                             }
                         }
                     } else {
                         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(visibleEntries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) },
+                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) }, modifier = if (entry.path == visibleEntries.firstOrNull()?.path) Modifier.focusRequester(contentFocusRequester) else Modifier,
                                     onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
                             }
                             if (hasMoreEntries) item {
@@ -706,11 +704,11 @@ private fun rememberArtworkBitmap(file: File?): androidx.compose.ui.graphics.Ima
 }
 
 @Composable
-private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
+private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
     LaunchedEffect(entry.path) { if (!entry.directory && isAudio(entry.name)) requestArt() }
     val artBitmap = rememberArtworkBitmap(art?.image)
     Card(
-        modifier = Modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
+        modifier = modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor),
         shape = RoundedCornerShape(10.dp)
     ) {
@@ -759,10 +757,10 @@ private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () ->
 }
 
 @Composable
-private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
+private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
     LaunchedEffect(entry.path) { if (!entry.directory && isVideo(entry.name)) requestArt() }
     val artBitmap = rememberArtworkBitmap(art?.image)
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).focusable(),
+    Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
