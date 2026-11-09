@@ -39,7 +39,8 @@ class MediaArtCache(
     fun request(entryPath: String, audio: Boolean, callback: (MediaArtResult) -> Unit) {
         val key = keyFor(entryPath)
         val image = File(cacheDir, "$key.jpg")
-        if (image.isFile && image.length() > 0L) {
+        val metadataFile = File(cacheDir, "$key.meta")
+        if (image.isFile && image.length() > 0L && !audio) {
             image.setLastModified(System.currentTimeMillis())
             callback(MediaArtResult(image))
             return
@@ -57,10 +58,16 @@ class MediaArtCache(
                             "-v error -show_entries format_tags=title,artist,album -of default=noprint_wrappers=1:nokey=0 ${quote(source.absolutePath)}"
                         )
                         val tags = parseTags(probe.output ?: "")
-                        val extracted = FFmpegKit.execute(
-                            "-y -i ${quote(source.absolutePath)} -map 0:v:0 -frames:v 1 -vf scale=640:-2 -q:v 3 ${quote(output.absolutePath)}"
-                        )
-                        val art = if (ReturnCode.isSuccess(extracted.returnCode) && output.isFile && output.length() > 0L) output else null
+                        metadataFile.writeText(tags.entries.joinToString("\n") { "${it.key}=${it.value}" })
+                        val art = if (output.isFile && output.length() > 0L) {
+                            output.setLastModified(System.currentTimeMillis())
+                            output
+                        } else {
+                            val extracted = FFmpegKit.execute(
+                                "-y -i ${quote(source.absolutePath)} -map 0:v:0 -frames:v 1 -vf scale=640:-2 -q:v 3 ${quote(output.absolutePath)}"
+                            )
+                            if (ReturnCode.isSuccess(extracted.returnCode) && output.isFile && output.length() > 0L) output else null
+                        }
                         result = MediaArtResult(art, tags["title"], tags["artist"], tags["album"])
                     } else {
                         val extracted = FFmpegKit.execute(
