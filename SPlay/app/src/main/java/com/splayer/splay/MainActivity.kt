@@ -226,6 +226,8 @@ private fun SPlayApp() {
     var host by rememberSaveable { mutableStateOf(preferences.getString("host", "") ?: "") }
     var shareName by rememberSaveable { mutableStateOf(preferences.getString("share", "") ?: "") }
     var startFolder by rememberSaveable { mutableStateOf(preferences.getString("start_folder", "") ?: "") }
+    var videoFolder by rememberSaveable { mutableStateOf(preferences.getString("video_folder", "") ?: "") }
+    var musicFolder by rememberSaveable { mutableStateOf(preferences.getString("music_folder", "") ?: "") }
     var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
     var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
     var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
@@ -496,9 +498,9 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.Home, "Обзор", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; sidebarExpanded = false }
-                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; sidebarExpanded = false }
-                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.Home, "Файлы", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; showSearch = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(videoFolder.trim().replace("/", "\\").trim('\\')) }
+                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(musicFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
                         SidebarItem(Icons.Filled.Settings, "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
@@ -518,24 +520,10 @@ private fun SPlayApp() {
                             } else false
                         }
                 ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (connected) when (mediaSection) { "Видео" -> "Видео"; "Музыка" -> "Аудио"; else -> "Обзор" } else "SPlay", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
-                    Spacer(Modifier.width(12.dp))
-                    if (!connected) Text("MEDIA PLAYER", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Spacer(Modifier.weight(1f))
-                    if (connected) {
-                        Text("● ПОДКЛЮЧЕНО", color = Color(0xFF8BCB9A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(14.dp))
-                        TextButton(onClick = {
-                            scope.launch(Dispatchers.IO) { browser.disconnect() }
-                            connected = false
-                            entries = emptyList()
-                            hasMoreEntries = false
-                            currentPath = ""
-                        }) { Text("Отключиться", color = AccentColor) }
-                    }
+                if (!connected) {
+                    Text("SPlay", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(18.dp))
                 }
-                Spacer(Modifier.height(18.dp))
                 if (!connected) {
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
                         Text("Подключение к SMB", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -564,36 +552,24 @@ private fun SPlayApp() {
                         Text("СЕТЕВОЕ ПОДКЛЮЧЕНИЕ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = shareName, onValueChange = { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = startFolder, onValueChange = { startFolder = it }, label = { Text("Начальная папка") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = startFolder, onValueChange = { startFolder = it }, label = { Text("Корневая папка файлов") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = videoFolder, onValueChange = { videoFolder = it }, label = { Text("Папка видео (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = musicFolder, onValueChange = { musicFolder = it }, label = { Text("Папка музыки (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Text("Кэш обложек и превью: до 2 ГБ", color = Color.Gray, fontSize = 12.sp)
                         OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = domain, onValueChange = { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply(); connect() }, enabled = !busy) { Text("Сохранить и подключиться") }
+                            Button(onClick = { preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("video_folder", videoFolder.trim()).putString("music_folder", musicFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply(); connect() }, enabled = !busy) { Text("Сохранить и подключиться") }
                             TextButton(onClick = { showSettings = false }) { Text("Готово", color = AccentColor) }
                         }
                     }
                 } else {
-                    Row(Modifier.fillMaxWidth().background(PanelColor, RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(if (currentPath.isBlank()) shareName else currentPath.replace("\\", "  /  "), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                            Text("Файловая библиотека", color = Color.LightGray, fontSize = 12.sp)
-                        }
-                        if (currentPath.isNotBlank()) TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }) { Text("← Назад", color = AccentColor) }
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (currentPath.isNotBlank()) TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }) { Text("←", color = AccentColor) }
+                        Text(currentPath.substringAfterLast('\\', ""), color = Color.Gray, fontSize = 12.sp, maxLines = 1)
                     }
-                    Spacer(Modifier.height(12.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        listOf("Все", "Видео", "Музыка").forEach { section ->
-                            val selected = mediaSection == section
-                            Surface(color = if (selected) AccentColor.copy(alpha = 0.18f) else PanelColor, shape = RoundedCornerShape(9.dp), modifier = Modifier.clickable { mediaSection = section }.focusable()) {
-                                Text(section, color = if (selected) AccentColor else Color.LightGray, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp))
-                            }
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text("${entries.size}${if (hasMoreEntries) "+" else ""} элементов", color = Color.Gray, fontSize = 12.sp)
-                    }
-                    Spacer(Modifier.height(10.dp))
                     if (showSearch) {
                         OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Icon(Icons.Filled.Search, null, tint = AccentColor) })
                         Spacer(Modifier.height(10.dp))
