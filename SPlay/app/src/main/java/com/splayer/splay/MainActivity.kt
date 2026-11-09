@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -734,10 +735,10 @@ private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () ->
 private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
     LaunchedEffect(entry.path) { if (!entry.directory && isVideo(entry.name)) requestArt() }
     val artBitmap = remember(art?.image?.absolutePath) { art?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() } }
-    Card(modifier = Modifier.fillMaxWidth().height(154.dp).clickable(onClick = onClick).focusable(),
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().height(104.dp).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
+        Column(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
                 if (artBitmap != null) Image(artBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 else Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(36.dp).height(36.dp))
             }
