@@ -418,7 +418,7 @@ private fun SPlayApp() {
         if (host.isNotBlank() && shareName.isNotBlank()) connect()
     }
 
-    LaunchedEffect(sidebarExpanded) {
+    LaunchedEffect(sidebarExpanded, busy, entries.firstOrNull()?.path) {
         if (sidebarExpanded) {
             delay(60)
             sidebarFocusRequester.requestFocus()
