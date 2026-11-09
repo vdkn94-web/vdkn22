@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -166,7 +164,7 @@ private fun SPlayApp() {
     var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
     var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
     var mediaSection by rememberSaveable { mutableStateOf("Все файлы") }
-    var gridMode by rememberSaveable { mutableStateOf(false) }
+    var gridMode by rememberSaveable { mutableStateOf(true) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var currentPath by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
@@ -340,8 +338,8 @@ private fun SPlayApp() {
                             }
                         }
                         if (!gridMode) {
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                items(visibleEntries, key = { it.path }) { entry ->
+                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                visibleEntries.forEach { entry ->
                                     EntryRow(entry = entry, onClick = {
                                         if (entry.directory) refresh(entry.path) else play(entry)
                                     })
