@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +38,11 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -46,6 +54,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -83,6 +92,7 @@ import com.hierynomus.smbj.share.DiskShare
 import java.util.EnumSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
@@ -231,6 +241,13 @@ private fun SPlayApp() {
     var nowPlaying by remember { mutableStateOf<RemoteEntry?>(null) }
     var videoMode by remember { mutableStateOf(false) }
     var playbackPlaying by remember { mutableStateOf(false) }
+    var playbackPosition by remember { mutableStateOf(0L) }
+    var playbackDuration by remember { mutableStateOf(0L) }
+    var controlsVisible by remember { mutableStateOf(true) }
+    var shuffleEnabled by rememberSaveable { mutableStateOf(false) }
+    var playQueue by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
+    var queueIndex by remember { mutableIntStateOf(-1) }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
 
     val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800")) }
@@ -312,12 +329,44 @@ private fun SPlayApp() {
             if (domain.isNotBlank()) media.addOption(":smb-domain=$domain")
             mediaPlayer.media = media
             media.release()
+            val candidates = entries.filter { !it.directory && (isVideo(it.name) || isAudio(it.name)) }.sortedBy { it.name.lowercase() }
+            playQueue = if (shuffleEnabled) candidates.shuffled() else candidates
+            queueIndex = playQueue.indexOfFirst { it.path == entry.path }
+            if (queueIndex < 0) { playQueue = listOf(entry); queueIndex = 0 }
             nowPlaying = entry
+            controlsVisible = true
             videoMode = isVideo(entry.name)
             mediaPlayer.play()
             playbackPlaying = true
         } catch (e: Exception) {
             errorText = "VLC не смог открыть файл: ${e.message ?: "ошибка воспроизведения"}"
+        }
+    }
+
+    LaunchedEffect(nowPlaying) {
+        while (nowPlaying != null) {
+            playbackPosition = mediaPlayer.time.coerceAtLeast(0L)
+            playbackDuration = mediaPlayer.length.coerceAtLeast(0L)
+            playbackPlaying = mediaPlayer.isPlaying
+            delay(500)
+        }
+    }
+
+    LaunchedEffect(controlsVisible, nowPlaying) {
+        if (controlsVisible && nowPlaying != null) {
+            delay(5000)
+            controlsVisible = false
+        }
+    }
+
+    fun playQueueStep(delta: Int) {
+        if (playQueue.isEmpty()) return
+        val next = (queueIndex + delta).coerceIn(0, playQueue.lastIndex)
+        if (next != queueIndex) {
+            val selected = playQueue[next]
+            queueIndex = next
+            play(selected)
+            queueIndex = next
         }
     }
 
@@ -358,8 +407,18 @@ private fun SPlayApp() {
 
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         if (nowPlaying != null) {
-            Column(Modifier.fillMaxSize().background(Color.Black)) {
-                Row(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) false else {
+                    controlsVisible = true
+                    when (event.key) {
+                        Key.DirectionLeft -> { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L); true }
+                        Key.DirectionRight -> { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)); true }
+                        Key.DirectionCenter, Key.Enter -> { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play(); true }
+                        else -> false
+                    }
+                }
+            }) {
+                if (controlsVisible) Row(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("SPlay", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(Modifier.width(16.dp))
                     Text(nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
@@ -387,19 +446,23 @@ private fun SPlayApp() {
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().background(PanelColor).padding(18.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = {
-                        if (playbackPlaying) mediaPlayer.pause() else mediaPlayer.play()
-                        playbackPlaying = !playbackPlaying
-                    }) { Text(if (playbackPlaying) "Пауза" else "Продолжить") }
-                    Spacer(Modifier.width(16.dp))
-                    Button(onClick = {
-                        mediaPlayer.stop()
-                        try { mediaPlayer.detachViews() } catch (_: Exception) { }
-                        nowPlaying = null
-                        videoMode = false
-                        playbackPlaying = false
-                    }) { Text("Остановить") }
+                if (controlsVisible) Column(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(formatPlaybackTime(playbackPosition), color = Color.White, fontSize = 12.sp)
+                        Slider(value = if (playbackDuration > 0) playbackPosition.toFloat().coerceIn(0f, playbackDuration.toFloat()) else 0f,
+                            onValueChange = { playbackPosition = it.toLong(); mediaPlayer.time = it.toLong() },
+                            valueRange = 0f..playbackDuration.coerceAtLeast(1L).toFloat(),
+                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+                        Text(formatPlaybackTime(playbackDuration), color = Color.White, fontSize = 12.sp)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L) }) { Icon(Icons.Filled.FastRewind, null); Text("10") }
+                        TextButton(onClick = { playQueueStep(-1) }, enabled = queueIndex > 0) { Icon(Icons.Filled.SkipPrevious, "Предыдущий") }
+                        Button(onClick = { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play() }) { Text(if (playbackPlaying) "Ⅱ  Пауза" else "▶  Играть") }
+                        TextButton(onClick = { playQueueStep(1) }, enabled = queueIndex < playQueue.lastIndex) { Icon(Icons.Filled.SkipNext, "Следующий") }
+                        TextButton(onClick = { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)) }) { Text("10"); Icon(Icons.Filled.FastForward, null) }
+                        TextButton(onClick = { controlsVisible = false }) { Text("Скрыть") }
+                    }
                 }
             }
         } else {
@@ -425,7 +488,8 @@ private fun SPlayApp() {
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
                         SidebarItem(Icons.Filled.Home, "Обзор", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; sidebarExpanded = false }
                         SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; sidebarExpanded = false }
-                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
                         SidebarItem(Icons.Filled.Settings, "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
                         if (sidebarExpanded) {
@@ -520,8 +584,10 @@ private fun SPlayApp() {
                         Text("${entries.size}${if (hasMoreEntries) "+" else ""} элементов", color = Color.Gray, fontSize = 12.sp)
                     }
                     Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Text("⌕", color = AccentColor, fontSize = 22.sp) })
-                    Spacer(Modifier.height(10.dp))
+                    if (showSearch) {
+                        OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Icon(Icons.Filled.Search, null, tint = AccentColor) })
+                        Spacer(Modifier.height(10.dp))
+                    }
                     val visibleEntries = entries.filter { entry ->
                         (entry.directory || when (mediaSection) {
                             "Видео" -> isVideo(entry.name)
@@ -533,15 +599,16 @@ private fun SPlayApp() {
                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentColor) }
                     } else if (visibleEntries.isEmpty()) {
                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (searchQuery.isNotBlank()) "Ничего не найдено" else "В этой папке пока нет файлов", color = Color.Gray, fontSize = 16.sp) }
+                    } else if (mediaSection == "Видео" && !showSearch) {
+                        LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            gridItems(visibleEntries, key = { it.path }) { entry ->
+                                VideoTile(entry = entry, onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
+                            }
+                        }
                     } else {
                         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(visibleEntries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, onClick = {
-                                    if (entry.directory) {
-                                        searchQuery = ""
-                                        refresh(entry.path)
-                                    } else play(entry)
-                                })
+                                EntryRow(entry = entry, onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
                             }
                             if (hasMoreEntries) item {
                                 Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
@@ -627,6 +694,27 @@ private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
             Text(if (entry.directory) "ОТКРЫТЬ  ›" else "ВОСПРОИЗВЕСТИ  ›", color = AccentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
     }
+}
+
+@Composable
+private fun VideoTile(entry: RemoteEntry, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().height(190.dp).clickable(onClick = onClick).focusable(),
+        colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
+                Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(48.dp).height(48.dp))
+            }
+            Text(entry.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.fillMaxWidth().padding(12.dp))
+        }
+    }
+}
+
+private fun formatPlaybackTime(ms: Long): String {
+    val total = (ms / 1000L).coerceAtLeast(0L)
+    val hours = total / 3600L
+    val minutes = (total % 3600L) / 60L
+    val seconds = total % 60L
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
 }
 
 private fun isAudio(name: String): Boolean {
