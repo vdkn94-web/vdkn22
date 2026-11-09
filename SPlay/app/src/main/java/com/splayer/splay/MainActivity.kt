@@ -108,9 +108,9 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
-private val AppBackground = Color(0xFF101114)
-private val PanelColor = Color(0xFF1B1D22)
-private val AccentColor = Color(0xFFFF8A24)
+private val AppBackground = Color(0xFF0B1018)
+private val PanelColor = Color(0xB8202938)
+private val AccentColor = Color(0xFF9BB7FF)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -250,7 +250,7 @@ private fun SPlayApp() {
     val preferences = remember { context.getSharedPreferences("splay_settings", android.content.Context.MODE_PRIVATE) }
     var host by rememberSaveable { mutableStateOf(preferences.getString("host", "") ?: "") }
     var shareName by rememberSaveable { mutableStateOf(preferences.getString("share", "") ?: "") }
-    var startFolder by rememberSaveable { mutableStateOf(preferences.getString("start_folder", "") ?: "") }
+    val startFolder = ""
     var videoFolder by rememberSaveable { mutableStateOf(preferences.getString("video_folder", "") ?: "") }
     var musicFolder by rememberSaveable { mutableStateOf(preferences.getString("music_folder", "") ?: "") }
     var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
@@ -278,6 +278,7 @@ private fun SPlayApp() {
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
     val contentFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val sidebarFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
     val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
 
@@ -338,8 +339,8 @@ private fun SPlayApp() {
         errorText = null
         scope.launch {
             try {
-                val initialPath = startFolder.trim().replace("/", "\\").trim('\\')
-                preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("last_path", initialPath).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
+                val initialPath = ""
+                preferences.edit().remove("start_folder").putString("host", host.trim()).putString("share", shareName.trim()).putString("last_path", initialPath).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
                 val initialEntries = withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
                     browser.listPage(initialPath, true)
@@ -415,10 +416,16 @@ private fun SPlayApp() {
     }
 
     LaunchedEffect(Unit) {
-        if (host.isNotBlank() && shareName.isNotBlank()) {
-            val rememberedPath = preferences.getString("last_path", startFolder) ?: startFolder
-            startFolder = rememberedPath
-            connect()
+        if (host.isNotBlank() && shareName.isNotBlank()) connect()
+    }
+
+    LaunchedEffect(sidebarExpanded) {
+        if (sidebarExpanded) {
+            delay(60)
+            sidebarFocusRequester.requestFocus()
+        } else if (connected && nowPlaying == null) {
+            delay(60)
+            contentFocusRequester.requestFocus()
         }
     }
 
@@ -458,12 +465,16 @@ private fun SPlayApp() {
         if (nowPlaying != null) {
             Column(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) false else {
-                    controlsVisible = true
                     when (event.key) {
-                        Key.DirectionLeft -> { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L); true }
-                        Key.DirectionRight -> { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)); true }
-                        Key.DirectionCenter, Key.Enter -> { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play(); true }
-                        else -> false
+                        Key.DirectionCenter, Key.Enter -> {
+                            if (!controlsVisible) controlsVisible = true
+                            else if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play()
+                            true
+                        }
+                        Key.DirectionLeft -> { controlsVisible = true; mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L); true }
+                        Key.DirectionRight -> { controlsVisible = true; mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)); true }
+                        Key.DirectionUp, Key.DirectionDown -> { controlsVisible = true; true }
+                        else -> { controlsVisible = true; false }
                     }
                 }
             }) {
@@ -533,7 +544,9 @@ private fun SPlayApp() {
                         Modifier
                             .width(if (sidebarExpanded) 232.dp else 72.dp)
                             .fillMaxSize()
-                            .background(Color(0xFF111111))
+                            .background(Color(0xAA151D29))
+                            .focusRequester(sidebarFocusRequester)
+                            .focusable()
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     sidebarExpanded = false
@@ -548,7 +561,6 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.Home, "Файлы", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(startFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(videoFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(musicFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
@@ -599,7 +611,6 @@ private fun SPlayApp() {
                         Text("СЕТЕВОЕ ПОДКЛЮЧЕНИЕ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = shareName, onValueChange = { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = startFolder, onValueChange = { startFolder = it }, label = { Text("Корневая папка файлов") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = videoFolder, onValueChange = { videoFolder = it }, label = { Text("Папка видео (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = musicFolder, onValueChange = { musicFolder = it }, label = { Text("Папка музыки (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Text("Кэш обложек и превью: до 2 ГБ", color = Color.Gray, fontSize = 12.sp)
@@ -608,13 +619,13 @@ private fun SPlayApp() {
                         OutlinedTextField(value = domain, onValueChange = { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("video_folder", videoFolder.trim()).putString("music_folder", musicFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply(); connect() }, enabled = !busy) { Text("Сохранить и подключиться") }
+                            Button(onClick = { preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).remove("start_folder").putString("video_folder", videoFolder.trim()).putString("music_folder", musicFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply(); connect() }, enabled = !busy) { Text("Сохранить и подключиться") }
                             TextButton(onClick = { showSettings = false }) { Text("Готово", color = AccentColor) }
                         }
                     }
                 } else {
                     if (currentPath.isNotBlank()) {
-                        TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }, modifier = Modifier.padding(bottom = 4.dp)) { Text("← Назад", color = AccentColor) }
+                        Text(currentPath.substringAfterLast('\\'), color = Color.LightGray, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                     }
                     if (showSearch) {
                         OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Icon(Icons.Filled.Search, null, tint = AccentColor) })
@@ -632,7 +643,7 @@ private fun SPlayApp() {
                     } else if (visibleEntries.isEmpty()) {
                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (searchQuery.isNotBlank()) "Ничего не найдено" else "В этой папке пока нет файлов", color = Color.Gray, fontSize = 16.sp) }
                     } else if (mediaSection == "Видео" && !showSearch) {
-                        LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 210.dp), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             gridItems(visibleEntries, key = { it.path }) { entry ->
                                 VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) },
                                     onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
@@ -665,7 +676,7 @@ private fun SPlayApp() {
 @Composable
 private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, expanded: Boolean, onClick: () -> Unit) {
     Surface(
-        color = if (selected) Color(0xFF352719) else Color.Transparent,
+        color = if (selected) Color(0x553F5F91) else Color.Transparent,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).focusable()
     ) {
@@ -674,10 +685,10 @@ private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, exp
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
         ) {
-            Icon(icon, contentDescription = title, tint = if (selected) AccentColor else Color(0xFFB8B8B8), modifier = Modifier.width(23.dp).height(23.dp))
+            Icon(icon, contentDescription = title, tint = if (selected) AccentColor else Color(0xFFB8C2D2), modifier = Modifier.width(23.dp).height(23.dp))
             if (expanded) {
                 Spacer(Modifier.width(16.dp))
-                Text(title, color = if (selected) Color.White else Color(0xFFBDBDBD), fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                Text(title, color = if (selected) Color.White else Color(0xFFB8C2D2), fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
             }
         }
     }
