@@ -158,7 +158,8 @@ private fun SPlayApp() {
 
     var host by rememberSaveable { mutableStateOf("") }
     var shareName by rememberSaveable { mutableStateOf("") }
-    var startFolder by rememberSaveable { mutableStateOf("") }
+    val preferences = remember { context.getSharedPreferences("splay_settings", android.content.Context.MODE_PRIVATE) }
+    var startFolder by rememberSaveable { mutableStateOf(preferences.getString("start_folder", "") ?: "") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var domain by rememberSaveable { mutableStateOf("") }
@@ -276,7 +277,7 @@ private fun SPlayApp() {
                     Spacer(Modifier.height(14.dp))
                     OutlinedTextField(host, { host = it }, label = { Text("IP или имя сервера") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(shareName, { shareName = it }, label = { Text("Общая папка (share), например Media") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(startFolder, { startFolder = it }, label = { Text("Стартовая папка внутри share (необязательно)") }, placeholder = { Text("Например: Media/Movies") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(startFolder, { startFolder = it; preferences.edit().putString("start_folder", it).apply() }, label = { Text("Стартовая папка внутри share (необязательно)") }, placeholder = { Text("Например: Media/Movies") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(username, { username = it }, label = { Text("Пользователь (можно пусто для guest)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(password, { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(domain, { domain = it }, label = { Text("Домен (необязательно)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
