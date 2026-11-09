@@ -29,6 +29,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -78,9 +89,9 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
-private val AppBackground = Color(0xFF171717)
-private val PanelColor = Color(0xFF242424)
-private val AccentColor = Color(0xFFFF8800)
+private val AppBackground = Color(0xFF101114)
+private val PanelColor = Color(0xFF1B1D22)
+private val AccentColor = Color(0xFFFF8A24)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -412,11 +423,11 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem("⌂", "Обзор", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; sidebarExpanded = false }
-                        SidebarItem("▶", "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; sidebarExpanded = false }
-                        SidebarItem("♫", "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.Home, "Обзор", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
-                        SidebarItem("⚙", "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.Settings, "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
                         if (sidebarExpanded) {
                             Spacer(Modifier.height(10.dp))
                             Text(host, color = Color.LightGray, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 10.dp))
@@ -551,21 +562,21 @@ private fun SPlayApp() {
 }
 
 @Composable
-private fun SidebarItem(icon: String, title: String, selected: Boolean, expanded: Boolean, onClick: () -> Unit) {
+private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, expanded: Boolean, onClick: () -> Unit) {
     Surface(
-        color = if (selected) Color(0xFF332416) else Color.Transparent,
-        shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable(onClick = onClick).focusable()
+        color = if (selected) Color(0xFF352719) else Color.Transparent,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).focusable()
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = if (expanded) 13.dp else 0.dp, vertical = 13.dp),
+            Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 0.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
         ) {
-            Text(icon, color = if (selected) AccentColor else Color.LightGray, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Icon(icon, contentDescription = title, tint = if (selected) AccentColor else Color(0xFFB8B8B8), modifier = Modifier.width(23.dp).height(23.dp))
             if (expanded) {
-                Spacer(Modifier.width(14.dp))
-                Text(title, color = if (selected) Color.White else Color(0xFFBDBDBD), fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                Spacer(Modifier.width(16.dp))
+                Text(title, color = if (selected) Color.White else Color(0xFFBDBDBD), fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
             }
         }
     }
@@ -586,15 +597,15 @@ private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
                 modifier = Modifier.width(42.dp).height(42.dp).background(Color(0xFF303030), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    when {
-                        entry.directory -> "▰"
-                        isAudio(entry.name) -> "♫"
-                        else -> "▶"
+                Icon(
+                    imageVector = when {
+                        entry.directory -> Icons.Filled.Folder
+                        isAudio(entry.name) -> Icons.Filled.AudioFile
+                        else -> Icons.Filled.PlayCircleFilled
                     },
-                    color = AccentColor,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold
+                    contentDescription = null,
+                    tint = AccentColor,
+                    modifier = Modifier.width(23.dp).height(23.dp)
                 )
             }
             Spacer(Modifier.width(16.dp))
