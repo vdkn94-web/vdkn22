@@ -7,6 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -203,6 +208,8 @@ private fun SPlayApp() {
     var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
     var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
     var mediaSection by rememberSaveable { mutableStateOf("Все") }
+    var sidebarExpanded by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var currentPath by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
@@ -227,6 +234,7 @@ private fun SPlayApp() {
                 entries = result.first
                 hasMoreEntries = result.second
                 currentPath = path
+                preferences.edit().putString("last_path", path).apply()
             } catch (e: Exception) {
                 errorText = e.message ?: "Не удалось прочитать папку"
             } finally {
@@ -261,7 +269,7 @@ private fun SPlayApp() {
         scope.launch {
             try {
                 val initialPath = startFolder.trim().replace("/", "\\").trim('\\')
-                preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
+                preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("last_path", initialPath).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
                 val initialEntries = withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
                     browser.listPage(initialPath, true)
@@ -269,6 +277,7 @@ private fun SPlayApp() {
                 entries = initialEntries.first
                 hasMoreEntries = initialEntries.second
                 currentPath = initialPath
+                preferences.edit().putString("last_path", initialPath).apply()
                 connected = true
             } catch (e: Exception) {
                 connected = false
@@ -301,6 +310,14 @@ private fun SPlayApp() {
         }
     }
 
+    LaunchedEffect(Unit) {
+        if (host.isNotBlank() && shareName.isNotBlank()) {
+            val rememberedPath = preferences.getString("last_path", startFolder) ?: startFolder
+            startFolder = rememberedPath
+            connect()
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             try { mediaPlayer.stop() } catch (_: Exception) { }
@@ -311,7 +328,7 @@ private fun SPlayApp() {
         }
     }
 
-    BackHandler(enabled = nowPlaying != null || (connected && currentPath.isNotBlank())) {
+    BackHandler(enabled = nowPlaying != null || sidebarExpanded || showSettings || (connected && currentPath.isNotBlank())) {
         if (nowPlaying != null) {
             mediaPlayer.stop()
             try { mediaPlayer.detachViews() } catch (_: Exception) { }
@@ -374,40 +391,44 @@ private fun SPlayApp() {
             Row(Modifier.fillMaxSize()) {
                 if (connected) {
                     Column(
-                        Modifier.width(218.dp).fillMaxSize().background(Color(0xFF111111)).padding(horizontal = 14.dp, vertical = 24.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp, bottom = 30.dp)) {
-                            Text("S", color = AccentColor, fontSize = 34.sp, fontWeight = FontWeight.Black)
-                            Text("Play", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 14.dp, bottom = 10.dp))
-                        SidebarItem("⌂", "Обзор", mediaSection == "Все") { mediaSection = "Все" }
-                        SidebarItem("▶", "Видео", mediaSection == "Видео") { mediaSection = "Видео" }
-                        SidebarItem("♫", "Аудио", mediaSection == "Музыка") { mediaSection = "Музыка" }
-                        Spacer(Modifier.weight(1f))
-                        Surface(
-                            color = PanelColor,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text("SMB-СЕРВЕР", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.height(5.dp))
-                                Text(host, color = Color.White, fontSize = 13.sp, maxLines = 1)
-                                Text(shareName, color = Color.LightGray, fontSize = 11.sp, maxLines = 1)
+                        Modifier
+                            .width(if (sidebarExpanded) 232.dp else 72.dp)
+                            .fillMaxSize()
+                            .background(Color(0xFF111111))
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                                    sidebarExpanded = false
+                                    true
+                                } else false
                             }
+                            .padding(horizontal = if (sidebarExpanded) 14.dp else 8.dp, vertical = 22.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp, bottom = 28.dp)) {
+                            Text("S", color = AccentColor, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                            if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
-                        SidebarItem("↻", "Отключиться", false) {
-                            scope.launch(Dispatchers.IO) { browser.disconnect() }
-                            connected = false
-                            entries = emptyList()
-                            hasMoreEntries = false
-                            currentPath = ""
-                            searchQuery = ""
+                        if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
+                        SidebarItem("⌂", "Обзор", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; sidebarExpanded = false }
+                        SidebarItem("▶", "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; sidebarExpanded = false }
+                        SidebarItem("♫", "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; sidebarExpanded = false }
+                        Spacer(Modifier.weight(1f))
+                        SidebarItem("⚙", "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
+                        if (sidebarExpanded) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(host, color = Color.LightGray, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 10.dp))
+                            Text(shareName, color = Color.Gray, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 10.dp))
                         }
                     }
                 }
-                Column(Modifier.weight(1f).fillMaxSize().padding(horizontal = 30.dp, vertical = 22.dp)) {
+                Column(
+                    Modifier.weight(1f).fillMaxSize().padding(horizontal = 30.dp, vertical = 22.dp)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && connected && !sidebarExpanded) {
+                                sidebarExpanded = true
+                                true
+                            } else false
+                        }
+                ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (connected) when (mediaSection) { "Видео" -> "Видео"; "Музыка" -> "Аудио"; else -> "Обзор" } else "SPlay", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
                     Spacer(Modifier.width(12.dp))
@@ -446,6 +467,23 @@ private fun SPlayApp() {
                         Button(onClick = { connect() }, enabled = !busy) { Text(if (busy) "Подключаемся…" else "Подключиться к серверу") }
                         Spacer(Modifier.height(8.dp))
                         Text("Поддерживаются SMB2 и SMB3", color = Color.Gray, fontSize = 12.sp)
+                    }
+                } else if (showSettings) {
+                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                        Text("Настройки", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(18.dp))
+                        Text("СЕТЕВОЕ ПОДКЛЮЧЕНИЕ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = shareName, onValueChange = { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = startFolder, onValueChange = { startFolder = it }, label = { Text("Начальная папка") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = domain, onValueChange = { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = { preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply(); connect() }, enabled = !busy) { Text("Сохранить и подключиться") }
+                            TextButton(onClick = { showSettings = false }) { Text("Готово", color = AccentColor) }
+                        }
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().background(PanelColor, RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -509,18 +547,22 @@ private fun SPlayApp() {
 }
 
 @Composable
-private fun SidebarItem(icon: String, title: String, selected: Boolean, onClick: () -> Unit) {
+private fun SidebarItem(icon: String, title: String, selected: Boolean, expanded: Boolean, onClick: () -> Unit) {
     Surface(
         color = if (selected) Color(0xFF332416) else Color.Transparent,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable(onClick = onClick).focusable()
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically
+            Modifier.fillMaxWidth().padding(horizontal = if (expanded) 13.dp else 0.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
         ) {
-            Text(icon, color = if (selected) AccentColor else Color.LightGray, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
-            Text(title, color = if (selected) Color.White else Color(0xFFBDBDBD), fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+            Text(icon, color = if (selected) AccentColor else Color.LightGray, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            if (expanded) {
+                Spacer(Modifier.width(14.dp))
+                Text(title, color = if (selected) Color.White else Color(0xFFBDBDBD), fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+            }
         }
     }
 }
