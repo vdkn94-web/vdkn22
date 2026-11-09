@@ -1,10 +1,13 @@
 package com.splayer.splay
 
 import android.net.Uri
+import android.graphics.BitmapFactory
+import java.io.File
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.key.Key
@@ -71,6 +74,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -203,6 +208,23 @@ private class SmbBrowser {
         listingPath = null
     }
 
+    fun copyToFile(path: String, destination: File) {
+        val activeShare = share ?: error("Нет SMB-подключения")
+        val remote = activeShare.openFile(
+            path,
+            EnumSet.of(AccessMask.FILE_READ_DATA, AccessMask.FILE_READ_ATTRIBUTES),
+            null,
+            EnumSet.allOf(SMB2ShareAccess::class.java),
+            SMB2CreateDisposition.FILE_OPEN,
+            null
+        )
+        remote.use { file ->
+            file.inputStream.use { input ->
+                destination.outputStream().use { output -> input.copyTo(output, 256 * 1024) }
+            }
+        }
+    }
+
     fun disconnect() {
         closeListing()
         try { share?.close() } catch (_: Exception) { }
@@ -252,6 +274,15 @@ private fun SPlayApp() {
     var queueIndex by remember { mutableStateOf(-1) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
+    var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
+    val artCache = remember { MediaArtCache(context) { path, destination -> browser.copyToFile(path, destination) } }
+
+    fun requestMediaArt(entry: RemoteEntry, audio: Boolean) {
+        if (mediaArts.containsKey(entry.path)) return
+        artCache.request(entry.path, audio) { result ->
+            scope.launch { mediaArts = mediaArts + (entry.path to result) }
+        }
+    }
 
     val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800")) }
     val mediaPlayer = remember { MediaPlayer(libVlc) }
@@ -504,11 +535,6 @@ private fun SPlayApp() {
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
                         SidebarItem(Icons.Filled.Settings, "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
-                        if (sidebarExpanded) {
-                            Spacer(Modifier.height(10.dp))
-                            Text(host, color = Color.LightGray, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 10.dp))
-                            Text(shareName, color = Color.Gray, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 10.dp))
-                        }
                     }
                 }
                 Column(
@@ -566,9 +592,8 @@ private fun SPlayApp() {
                         }
                     }
                 } else {
-                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (currentPath.isNotBlank()) TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }) { Text("←", color = AccentColor) }
-                        Text(currentPath.substringAfterLast('\\', ""), color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+                    if (currentPath.isNotBlank()) {
+                        TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }, modifier = Modifier.padding(bottom = 4.dp)) { Text("← Назад", color = AccentColor) }
                     }
                     if (showSearch) {
                         OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Icon(Icons.Filled.Search, null, tint = AccentColor) })
@@ -588,13 +613,15 @@ private fun SPlayApp() {
                     } else if (mediaSection == "Видео" && !showSearch) {
                         LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             gridItems(visibleEntries, key = { it.path }) { entry ->
-                                VideoTile(entry = entry, onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
+                                VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) },
+                                    onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
                             }
                         }
                     } else {
                         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(visibleEntries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
+                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) },
+                                    onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
                             }
                             if (hasMoreEntries) item {
                                 Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
@@ -636,7 +663,9 @@ private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, exp
 }
 
 @Composable
-private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
+private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
+    LaunchedEffect(entry.path) { if (!entry.directory && isAudio(entry.name)) requestArt() }
+    val artBitmap = remember(art?.image?.absolutePath) { art?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() } }
     Card(
         modifier = Modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor),
@@ -650,24 +679,28 @@ private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
                 modifier = Modifier.width(42.dp).height(42.dp).background(Color(0xFF303030), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = when {
-                        entry.directory -> Icons.Filled.Folder
-                        isAudio(entry.name) -> Icons.Filled.AudioFile
-                        else -> Icons.Filled.PlayCircleFilled
-                    },
-                    contentDescription = null,
-                    tint = AccentColor,
-                    modifier = Modifier.width(23.dp).height(23.dp)
-                )
+                if (artBitmap != null) {
+                    Image(artBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                } else {
+                    Icon(
+                        imageVector = when {
+                            entry.directory -> Icons.Filled.Folder
+                            isAudio(entry.name) -> Icons.Filled.AudioFile
+                            else -> Icons.Filled.PlayCircleFilled
+                        },
+                        contentDescription = null,
+                        tint = AccentColor,
+                        modifier = Modifier.width(23.dp).height(23.dp)
+                    )
+                }
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                Text(entry.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(art?.title?.takeIf { isAudio(entry.name) } ?: entry.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Text(
                     when {
                         entry.directory -> "ПАПКА"
-                        isAudio(entry.name) -> "АУДИО"
+                        isAudio(entry.name) -> listOfNotNull(art?.artist, art?.album).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "АУДИО" }
                         else -> entry.name.substringAfterLast('.', "МЕДИА").uppercase()
                     },
                     color = Color.Gray,
@@ -683,12 +716,15 @@ private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
 }
 
 @Composable
-private fun VideoTile(entry: RemoteEntry, onClick: () -> Unit) {
+private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
+    LaunchedEffect(entry.path) { if (!entry.directory && isVideo(entry.name)) requestArt() }
+    val artBitmap = remember(art?.image?.absolutePath) { art?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() } }
     Card(modifier = Modifier.fillMaxWidth().height(154.dp).clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxWidth().height(104.dp).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
-                Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(36.dp).height(36.dp))
+                if (artBitmap != null) Image(artBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                else Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(36.dp).height(36.dp))
             }
             Text(entry.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
         }
