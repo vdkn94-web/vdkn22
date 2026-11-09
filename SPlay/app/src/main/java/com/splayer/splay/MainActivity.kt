@@ -158,13 +158,16 @@ private fun SPlayApp() {
     val browser = remember { SmbBrowser() }
     val scope = rememberCoroutineScope()
 
-    var host by rememberSaveable { mutableStateOf("") }
-    var shareName by rememberSaveable { mutableStateOf("") }
     val preferences = remember { context.getSharedPreferences("splay_settings", android.content.Context.MODE_PRIVATE) }
+    var host by rememberSaveable { mutableStateOf(preferences.getString("host", "") ?: "") }
+    var shareName by rememberSaveable { mutableStateOf(preferences.getString("share", "") ?: "") }
     var startFolder by rememberSaveable { mutableStateOf(preferences.getString("start_folder", "") ?: "") }
-    var username by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var domain by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
+    var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
+    var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
+    var mediaSection by rememberSaveable { mutableStateOf("Все файлы") }
+    var gridMode by rememberSaveable { mutableStateOf(false) }
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
     var currentPath by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
     var connected by remember { mutableStateOf(false) }
@@ -204,6 +207,7 @@ private fun SPlayApp() {
         scope.launch {
             try {
                 val initialPath = startFolder.trim().replace("/", "\\").trim('\\')
+                preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
                 val initialEntries = withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
                     browser.list(initialPath)
@@ -252,8 +256,10 @@ private fun SPlayApp() {
         }
     }
 
-    BackHandler(enabled = nowPlaying != null || (connected && currentPath.isNotBlank())) {
-        if (nowPlaying != null) {
+    BackHandler(enabled = fullscreen || nowPlaying != null || (connected && currentPath.isNotBlank())) {
+        if (fullscreen) {
+            fullscreen = false
+        } else if (nowPlaying != null) {
             mediaPlayer.stop()
             nowPlaying = null
             videoMode = false
