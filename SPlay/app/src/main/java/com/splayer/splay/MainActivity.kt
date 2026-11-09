@@ -246,7 +246,7 @@ private fun SPlayApp() {
     var controlsVisible by remember { mutableStateOf(true) }
     var shuffleEnabled by rememberSaveable { mutableStateOf(false) }
     var playQueue by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
-    var queueIndex by remember { mutableIntStateOf(-1) }
+    var queueIndex by remember { mutableStateOf(-1) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
 
@@ -363,9 +363,11 @@ private fun SPlayApp() {
         if (playQueue.isEmpty()) return
         val next = (queueIndex + delta).coerceIn(0, playQueue.lastIndex)
         if (next != queueIndex) {
-            val selected = playQueue[next]
+            val activeQueue = playQueue
+            val selected = activeQueue[next]
             queueIndex = next
             play(selected)
+            playQueue = activeQueue
             queueIndex = next
         }
     }
@@ -457,6 +459,13 @@ private fun SPlayApp() {
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L) }) { Icon(Icons.Filled.FastRewind, null); Text("10") }
+                        TextButton(onClick = {
+                            shuffleEnabled = !shuffleEnabled
+                            val current = nowPlaying
+                            val rest = playQueue.filter { it.path != current?.path }
+                            playQueue = if (shuffleEnabled) listOfNotNull(current) + rest.shuffled() else (listOfNotNull(current) + rest.sortedBy { it.name.lowercase() })
+                            queueIndex = if (current == null) -1 else 0
+                        }) { Icon(Icons.Filled.Shuffle, "Перемешать", tint = if (shuffleEnabled) AccentColor else Color.LightGray) }
                         TextButton(onClick = { playQueueStep(-1) }, enabled = queueIndex > 0) { Icon(Icons.Filled.SkipPrevious, "Предыдущий") }
                         Button(onClick = { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play() }) { Text(if (playbackPlaying) "Ⅱ  Пауза" else "▶  Играть") }
                         TextButton(onClick = { playQueueStep(1) }, enabled = queueIndex < playQueue.lastIndex) { Icon(Icons.Filled.SkipNext, "Следующий") }
