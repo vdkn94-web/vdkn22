@@ -17,6 +17,12 @@ android {
         versionName = "1.0"
     }
 
+    packaging {
+        jniLibs {
+            pickFirsts += "**/libc++_shared.so"
+        }
+    }
+
     buildTypes {
         release {
             optimization {
