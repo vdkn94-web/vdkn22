@@ -471,18 +471,46 @@ private fun SPlayApp() {
 @Composable
 private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).focusable(),
+        modifier = Modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(10.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (entry.directory) "📁" else if (isAudio(entry.name)) "♫" else "▶", fontSize = 22.sp)
-            Spacer(Modifier.width(14.dp))
-            Text(entry.name, modifier = Modifier.weight(1f), color = Color.White, fontSize = 17.sp, maxLines = 1)
-            Text(if (entry.directory) "ОТКРЫТЬ  ›" else "ВОСПРОИЗВЕСТИ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier.width(42.dp).height(42.dp).background(Color(0xFF303030), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    when {
+                        entry.directory -> "▰"
+                        isAudio(entry.name) -> "♫"
+                        else -> "▶"
+                    },
+                    color = AccentColor,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                Text(entry.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(
+                    when {
+                        entry.directory -> "ПАПКА"
+                        isAudio(entry.name) -> "АУДИО"
+                        else -> entry.name.substringAfterLast('.', "МЕДИА").uppercase()
+                    },
+                    color = Color.Gray,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    maxLines = 1
+                )
+            }
+            Text(if (entry.directory) "ОТКРЫТЬ  ›" else "ВОСПРОИЗВЕСТИ  ›", color = AccentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
