@@ -49,6 +49,7 @@ dependencies {
     implementation(libs.androidx.tv.material)
 
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.hierynomus:smbj:0.13.0")
     implementation("org.videolan.android:libvlc-all:3.7.7")
