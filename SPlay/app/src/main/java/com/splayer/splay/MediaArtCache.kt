@@ -40,7 +40,13 @@ class MediaArtCache(
         val key = keyFor(entryPath)
         val image = File(cacheDir, "$key.jpg")
         val metadataFile = File(cacheDir, "$key.meta")
-        if (image.isFile && image.length() > 0L && !audio) {
+        if (audio && metadataFile.isFile) {
+            val tags = parseTags(metadataFile.readText())
+            image.takeIf { it.isFile && it.length() > 0L }?.setLastModified(System.currentTimeMillis())
+            callback(MediaArtResult(image.takeIf { it.isFile && it.length() > 0L }, tags["title"], tags["artist"], tags["album"]))
+            return
+        }
+        if (image.isFile && image.length() > 0L) {
             image.setLastModified(System.currentTimeMillis())
             callback(MediaArtResult(image))
             return
