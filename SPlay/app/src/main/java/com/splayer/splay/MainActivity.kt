@@ -314,6 +314,7 @@ private fun SPlayApp() {
     BackHandler(enabled = nowPlaying != null || (connected && currentPath.isNotBlank())) {
         if (nowPlaying != null) {
             mediaPlayer.stop()
+            try { mediaPlayer.detachViews() } catch (_: Exception) { }
             nowPlaying = null
             videoMode = false
             playbackPlaying = false
@@ -332,6 +333,7 @@ private fun SPlayApp() {
                     Text(nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
                     TextButton(onClick = {
                         mediaPlayer.stop()
+                        try { mediaPlayer.detachViews() } catch (_: Exception) { }
                         nowPlaying = null
                         videoMode = false
                         playbackPlaying = false
@@ -361,6 +363,7 @@ private fun SPlayApp() {
                     Spacer(Modifier.width(16.dp))
                     Button(onClick = {
                         mediaPlayer.stop()
+                        try { mediaPlayer.detachViews() } catch (_: Exception) { }
                         nowPlaying = null
                         videoMode = false
                         playbackPlaying = false
@@ -428,7 +431,7 @@ private fun SPlayApp() {
                         Text("${entries.size}${if (hasMoreEntries) "+" else ""} элементов", color = Color.Gray, fontSize = 12.sp)
                     }
                     Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск в текущей папке…") }, leadingIcon = { Text("⌕", color = AccentColor, fontSize = 22.sp) })
+                    OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Text("⌕", color = AccentColor, fontSize = 22.sp) })
                     Spacer(Modifier.height(10.dp))
                     val visibleEntries = entries.filter { entry ->
                         (entry.directory || when (mediaSection) {
