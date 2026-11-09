@@ -36,7 +36,7 @@ class MediaArtCache(
         ThreadPoolExecutor.AbortPolicy()
     )
 
-    fun request(entryPath: String, audio: Boolean, callback: (MediaArtResult) -> Unit) {
+    fun request(entryPath: String, audio: Boolean, callback: (MediaArtResult) -> Unit): Boolean {
         val key = keyFor(entryPath)
         val image = File(cacheDir, "$key.jpg")
         val metadataFile = File(cacheDir, "$key.meta")
@@ -44,14 +44,14 @@ class MediaArtCache(
             val tags = parseTags(metadataFile.readText())
             image.takeIf { it.isFile && it.length() > 0L }?.setLastModified(System.currentTimeMillis())
             callback(MediaArtResult(image.takeIf { it.isFile && it.length() > 0L }, tags["title"], tags["artist"], tags["album"]))
-            return
+            return true
         }
         if (image.isFile && image.length() > 0L) {
             image.setLastModified(System.currentTimeMillis())
             callback(MediaArtResult(image))
-            return
+            return true
         }
-        if (!inFlight.add(key)) return
+        if (!inFlight.add(key)) return true
         try {
             executor.execute {
                 val source = File(tempDir, "$key.media")
@@ -91,8 +91,10 @@ class MediaArtCache(
                 }
                 callback(result)
             }
+            return true
         } catch (_: java.util.concurrent.RejectedExecutionException) {
             inFlight.remove(key)
+            return false
         }
     }
 
