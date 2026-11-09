@@ -24,7 +24,7 @@ data class MediaArtResult(
  * SMB bytes are streamed through named pipes; large videos are not copied to local storage.
  */
 class MediaArtCache(
-    context: Context,
+    private val context: Context,
     private val copyRemoteToPipe: (String, String) -> Unit
 ) {
     private val cacheDir = File(context.cacheDir, "media-art").apply { mkdirs() }
