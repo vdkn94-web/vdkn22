@@ -61,7 +61,7 @@ class MediaArtCache(
                     copyRemoteFile(entryPath, source)
                     if (audio) {
                         val probe = FFprobeKit.execute(
-                            "-v error -show_entries format_tags=title,artist,album -of default=noprint_wrappers=1:nokey=0 ${quote(source.absolutePath)}"
+                            "-v error -show_entries format_tags=title,artist,album:stream_tags=title,artist,album -of default=noprint_wrappers=1:nokey=0 ${quote(source.absolutePath)}"
                         )
                         val tags = parseTags(probe.output ?: "")
                         metadataFile.writeText(tags.entries.joinToString("\n") { "${it.key}=${it.value}" })
@@ -100,8 +100,10 @@ class MediaArtCache(
         val result = HashMap<String, String>()
         output.lineSequence().forEach { line ->
             val split = line.indexOf('=')
-            if (split > 0) result[line.substring(0, split).trim().lowercase()] =
-                line.substring(split + 1).trim().trim('"').takeIf { it.isNotBlank() } ?: ""
+            if (split > 0) {
+                val tag = line.substring(0, split).trim().lowercase().substringAfterLast(':')
+                result[tag] = line.substring(split + 1).trim().trim('"').takeIf { it.isNotBlank() } ?: ""
+            }
         }
         return result
     }
