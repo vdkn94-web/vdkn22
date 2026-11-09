@@ -51,13 +51,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.protocol.commons.EnumWithValue
+import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation
+import com.hierynomus.mssmb2.SMB2CreateDisposition
+import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
+import java.util.EnumSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -124,18 +129,49 @@ private class SmbBrowser {
         }
     }
 
-    fun list(path: String): List<RemoteEntry> {
+    private var listingDirectory: com.hierynomus.smbj.share.Directory? = null
+    private var listingIterator: Iterator<FileIdBothDirectoryInformation>? = null
+    private var listingPath: String? = null
+
+    fun listPage(path: String, reset: Boolean, pageSize: Int = 80): Pair<List<RemoteEntry>, Boolean> {
         val activeShare = share ?: error("Сначала подключись к SMB-папке")
-        return activeShare.list(path).mapNotNull { item ->
+        if (reset || listingPath != path || listingIterator == null) {
+            closeListing()
+            listingDirectory = activeShare.openDirectory(
+                path,
+                EnumSet.of(AccessMask.FILE_LIST_DIRECTORY, AccessMask.FILE_READ_ATTRIBUTES, AccessMask.FILE_READ_EA),
+                null,
+                EnumSet.allOf(SMB2ShareAccess::class.java),
+                SMB2CreateDisposition.FILE_OPEN,
+                null
+            )
+            listingIterator = listingDirectory!!.iterator()
+            listingPath = path
+        }
+
+        val result = ArrayList<RemoteEntry>(pageSize)
+        val iterator = listingIterator ?: return Pair(emptyList(), false)
+        while (result.size < pageSize && iterator.hasNext()) {
+            val item = iterator.next()
             val name = item.fileName
-            if (name == "." || name == "..") return@mapNotNull null
+            if (name == "." || name == "..") continue
             val isDirectory = EnumWithValue.EnumUtils.isSet(
                 item.fileAttributes,
                 FileAttributes.FILE_ATTRIBUTE_DIRECTORY
             )
             val childPath = if (path.isBlank()) name else "$path\\$name"
-            RemoteEntry(name, childPath, isDirectory)
-        }.sortedWith(compareByDescending<RemoteEntry> { it.directory }.thenBy { it.name.lowercase() })
+            result.add(RemoteEntry(name, childPath, isDirectory))
+        }
+        val hasMore = iterator.hasNext()
+        if (!hasMore) closeListing()
+        return Pair(result, hasMore)
+    }
+
+    private fun closeListing() {
+        try { listingDirectory?.close() } catch (_: Exception) { }
+        listingDirectory = null
+        listingIterator = null
+        listingPath = null
     }
 
     fun disconnect() {
@@ -143,6 +179,7 @@ private class SmbBrowser {
         try { session?.close() } catch (_: Exception) { }
         try { connection?.close() } catch (_: Exception) { }
         try { client?.close() } catch (_: Exception) { }
+        closeListing()
         share = null
         session = null
         connection = null
@@ -168,6 +205,7 @@ private fun SPlayApp() {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var currentPath by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
+    var hasMoreEntries by remember { mutableStateOf(false) }
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
@@ -184,11 +222,28 @@ private fun SPlayApp() {
         errorText = null
         scope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { browser.list(path) }
-                entries = result
+                val result = withContext(Dispatchers.IO) { browser.listPage(path, true) }
+                entries = result.first
+                hasMoreEntries = result.second
                 currentPath = path
             } catch (e: Exception) {
                 errorText = e.message ?: "Не удалось прочитать папку"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun loadMore() {
+        if (busy || !hasMoreEntries) return
+        busy = true
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { browser.listPage(currentPath, false) }
+                entries = entries + result.first
+                hasMoreEntries = result.second
+            } catch (e: Exception) {
+                errorText = e.message ?: "Не удалось загрузить следующие файлы"
             } finally {
                 busy = false
             }
@@ -208,9 +263,10 @@ private fun SPlayApp() {
                 preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("start_folder", startFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
                 val initialEntries = withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
-                    browser.list(initialPath)
+                    browser.listPage(initialPath, true)
                 }
-                entries = initialEntries
+                entries = initialEntries.first
+                hasMoreEntries = initialEntries.second
                 currentPath = initialPath
                 connected = true
             } catch (e: Exception) {
@@ -304,6 +360,7 @@ private fun SPlayApp() {
                             browser.disconnect()
                             connected = false
                             entries = emptyList()
+                            hasMoreEntries = false
                             currentPath = ""
                             nowPlaying = null
                         }) { Text("Отключиться") }
@@ -368,6 +425,13 @@ private fun SPlayApp() {
                                     }
                                 }
                             }
+                        }
+                        if (hasMoreEntries) {
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { loadMore() }, enabled = !busy) {
+                                Text(if (busy) "Загружаем…" else "Показать ещё")
+                            }
+                            Text("Показано: ${entries.size}", color = Color.LightGray, fontSize = 12.sp)
                         }
                     }
                 }
