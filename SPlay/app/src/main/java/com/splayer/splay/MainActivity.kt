@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -200,9 +202,8 @@ private fun SPlayApp() {
     var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
     var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
     var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
-    var mediaSection by rememberSaveable { mutableStateOf("Все файлы") }
-    var gridMode by rememberSaveable { mutableStateOf(true) }
-    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var mediaSection by rememberSaveable { mutableStateOf("Все") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var currentPath by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
     var hasMoreEntries by remember { mutableStateOf(false) }
@@ -310,10 +311,8 @@ private fun SPlayApp() {
         }
     }
 
-    BackHandler(enabled = fullscreen || nowPlaying != null || (connected && currentPath.isNotBlank())) {
-        if (fullscreen) {
-            fullscreen = false
-        } else if (nowPlaying != null) {
+    BackHandler(enabled = nowPlaying != null || (connected && currentPath.isNotBlank())) {
+        if (nowPlaying != null) {
             mediaPlayer.stop()
             nowPlaying = null
             videoMode = false
@@ -325,178 +324,144 @@ private fun SPlayApp() {
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
-        Row(modifier = Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-            if (!fullscreen) {
-            Column(modifier = Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState())) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("SPlay", fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = (-1).sp)
-                    Spacer(Modifier.width(14.dp))
-                    Text("MEDIA PLAYER", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        if (nowPlaying != null) {
+            Column(Modifier.fillMaxSize().background(Color.Black)) {
+                Row(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("SPlay", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(Modifier.width(16.dp))
+                    Text(nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
+                    TextButton(onClick = {
+                        mediaPlayer.stop()
+                        nowPlaying = null
+                        videoMode = false
+                        playbackPlaying = false
+                    }) { Text("Закрыть", color = AccentColor) }
                 }
-                Spacer(Modifier.height(20.dp))
-
-                if (!connected) {
-                    Text("Подключение к серверу", fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(14.dp))
-                    OutlinedTextField(host, { host = it }, label = { Text("IP или имя сервера") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(shareName, { shareName = it }, label = { Text("Общая папка (share), например Media") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(startFolder, { startFolder = it; preferences.edit().putString("start_folder", it).apply() }, label = { Text("Стартовая папка внутри share (необязательно)") }, placeholder = { Text("Например: Media/Movies") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(username, { username = it }, label = { Text("Пользователь (можно пусто для guest)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(password, { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(domain, { domain = it }, label = { Text("Домен (необязательно)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(14.dp))
-                    Button(onClick = { connect() }, enabled = !busy) {
-                        Text(if (busy) "Подключаемся…" else "Подключиться")
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text("SMB2 / SMB3  •  Пустой путь откроет корень ресурса.", color = Color.LightGray, fontSize = 13.sp)
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("SPlay", fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                            Text(if (currentPath.isBlank()) "Корень общей папки" else currentPath.replace("\\", "  /  "), color = Color.LightGray, fontSize = 13.sp)
+                if (videoMode) {
+                    AndroidView(factory = { viewContext ->
+                        VLCVideoLayout(viewContext).also { layout ->
+                            videoLayout = layout
+                            mediaPlayer.attachViews(layout, null, false, false)
                         }
+                    }, modifier = Modifier.fillMaxWidth().weight(1f))
+                } else {
+                    Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF101010)), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("♫", fontSize = 88.sp, color = AccentColor)
+                            Text(nowPlaying!!.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            Text("Воспроизведение аудио", color = Color.LightGray, fontSize = 14.sp)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().background(PanelColor).padding(18.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = {
+                        if (playbackPlaying) mediaPlayer.pause() else mediaPlayer.play()
+                        playbackPlaying = !playbackPlaying
+                    }) { Text(if (playbackPlaying) "Пауза" else "Продолжить") }
+                    Spacer(Modifier.width(16.dp))
+                    Button(onClick = {
+                        mediaPlayer.stop()
+                        nowPlaying = null
+                        videoMode = false
+                        playbackPlaying = false
+                    }) { Text("Остановить") }
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxSize().padding(horizontal = 34.dp, vertical = 22.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("SPlay", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp)
+                    Spacer(Modifier.width(12.dp))
+                    Text("MEDIA PLAYER", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.weight(1f))
+                    if (connected) {
+                        Text("● ПОДКЛЮЧЕНО", color = Color(0xFF8BCB9A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(14.dp))
                         TextButton(onClick = {
-                            browser.disconnect()
+                            scope.launch(Dispatchers.IO) { browser.disconnect() }
                             connected = false
                             entries = emptyList()
                             hasMoreEntries = false
                             currentPath = ""
-                            nowPlaying = null
-                        }) { Text("Отключиться") }
+                        }) { Text("Отключиться", color = AccentColor) }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                if (!connected) {
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
+                        Text("Подключение к SMB", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Укажи сетевой ресурс, чтобы открыть свою медиатеку", color = Color.LightGray, fontSize = 14.sp)
+                        Spacer(Modifier.height(18.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            OutlinedTextField(host, { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.weight(1f))
+                            OutlinedTextField(shareName, { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.weight(1f))
+                        }
+                        OutlinedTextField(startFolder, { startFolder = it; preferences.edit().putString("start_folder", it).apply() }, label = { Text("Начальная папка (необязательно)") }, placeholder = { Text("Movies") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            OutlinedTextField(username, { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.weight(1f))
+                            OutlinedTextField(password, { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.weight(1f))
+                            OutlinedTextField(domain, { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(18.dp))
+                        Button(onClick = { connect() }, enabled = !busy) { Text(if (busy) "Подключаемся…" else "Подключиться к серверу") }
+                        Spacer(Modifier.height(8.dp))
+                        Text("Поддерживаются SMB2 и SMB3", color = Color.Gray, fontSize = 12.sp)
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth().background(PanelColor, RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(if (currentPath.isBlank()) shareName else currentPath.replace("\\", "  /  "), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text("Файловая библиотека", color = Color.LightGray, fontSize = 12.sp)
+                        }
+                        if (currentPath.isNotBlank()) TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }) { Text("← Назад", color = AccentColor) }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        listOf("Все файлы", "Видео", "Музыка").forEach { section ->
-                            TextButton(onClick = { mediaSection = section }) {
-                                Text(section, color = if (mediaSection == section) AccentColor else Color.LightGray,
-                                    fontWeight = if (mediaSection == section) FontWeight.Bold else FontWeight.Normal)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        listOf("Все", "Видео", "Музыка").forEach { section ->
+                            val selected = mediaSection == section
+                            Surface(color = if (selected) AccentColor.copy(alpha = 0.18f) else PanelColor, shape = RoundedCornerShape(9.dp), modifier = Modifier.clickable { mediaSection = section }.focusable()) {
+                                Text(section, color = if (selected) AccentColor else Color.LightGray, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp))
                             }
                         }
-                        TextButton(onClick = { gridMode = !gridMode }) {
-                            Text(if (gridMode) "☷ Список" else "▦ Плитка", color = AccentColor)
-                        }
+                        Spacer(Modifier.weight(1f))
+                        Text("${entries.size}${if (hasMoreEntries) "+" else ""} элементов", color = Color.Gray, fontSize = 12.sp)
                     }
-                    if (currentPath.isNotBlank()) {
-                        TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }) {
-                            Text("← На уровень выше")
-                        }
-                    }
-                    if (busy) {
-                        CircularProgressIndicator()
-                    } else if (entries.isEmpty()) {
-                        Text("В этой папке пока нет файлов", color = Color.LightGray)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск в текущей папке…") }, leadingIcon = { Text("⌕", color = AccentColor, fontSize = 22.sp) })
+                    Spacer(Modifier.height(10.dp))
+                    val visibleEntries = entries.filter { entry ->
+                        (entry.directory || when (mediaSection) {
+                            "Видео" -> isVideo(entry.name)
+                            "Музыка" -> isAudio(entry.name)
+                            else -> true
+                        }) && entry.name.contains(searchQuery, ignoreCase = true)
+                    }.sortedWith(compareByDescending<RemoteEntry> { it.directory }.thenBy { it.name.lowercase() })
+                    if (busy && entries.isEmpty()) {
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentColor) }
+                    } else if (visibleEntries.isEmpty()) {
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (searchQuery.isNotBlank()) "Ничего не найдено" else "В этой папке пока нет файлов", color = Color.Gray, fontSize = 16.sp) }
                     } else {
-                        val visibleEntries = entries.filter { entry ->
-                            entry.directory || when (mediaSection) {
-                                "Видео" -> isVideo(entry.name)
-                                "Музыка" -> isAudio(entry.name)
-                                else -> true
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            items(visibleEntries, key = { it.path }) { entry ->
+                                EntryRow(entry = entry, onClick = {
+                                    if (entry.directory) {
+                                        searchQuery = ""
+                                        refresh(entry.path)
+                                    } else play(entry)
+                                })
                             }
-                        }
-                        if (!gridMode) {
-                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                visibleEntries.forEach { entry ->
-                                    EntryRow(entry = entry, onClick = {
-                                        if (entry.directory) refresh(entry.path) else play(entry)
-                                    })
+                            if (hasMoreEntries) item {
+                                Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                                    Button(onClick = { loadMore() }, enabled = !busy) { Text(if (busy) "Загружаем…" else "Загрузить ещё") }
                                 }
                             }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                visibleEntries.chunked(2).forEach { pair ->
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        pair.forEach { entry ->
-                                            Card(
-                                                modifier = Modifier.weight(1f).height(112.dp).clickable {
-                                                    if (entry.directory) refresh(entry.path) else play(entry)
-                                                }.focusable(),
-                                                colors = CardDefaults.cardColors(containerColor = PanelColor),
-                                                shape = RoundedCornerShape(14.dp)
-                                            ) {
-                                                Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                                                    Text(if (entry.directory) "📁" else if (isAudio(entry.name)) "♫" else "▶", fontSize = 24.sp)
-                                                    Spacer(Modifier.height(7.dp))
-                                                    Text(entry.name, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                                                }
-                                            }
-                                        }
-                                        if (pair.size == 1) Spacer(Modifier.weight(1f))
-                                    }
-                                }
-                            }
-                        }
-                        if (hasMoreEntries) {
-                            Spacer(Modifier.height(12.dp))
-                            Button(onClick = { loadMore() }, enabled = !busy) {
-                                Text(if (busy) "Загружаем…" else "Показать ещё")
-                            }
-                            Text("Показано: ${entries.size}", color = Color.LightGray, fontSize = 12.sp)
                         }
                     }
                 }
-
                 if (errorText != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(errorText!!, color = Color(0xFFFF8D8D), fontSize = 14.sp)
-                }
-            }
-            }
-
-            if (nowPlaying != null) {
-                Column(modifier = Modifier.weight(if (fullscreen) 1f else 1.05f).fillMaxSize()) {
-                    Text("NOW PLAYING", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(nowPlaying!!.name, modifier = Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                        TextButton(onClick = { fullscreen = !fullscreen }) {
-                            Text(if (fullscreen) "Свернуть" else "На весь экран", color = AccentColor)
-                        }
-                    }
-                    Spacer(Modifier.height(14.dp))
-                    if (videoMode) {
-                        AndroidView(
-                            factory = { viewContext ->
-                                VLCVideoLayout(viewContext).also { layout ->
-                                    videoLayout = layout
-                                    mediaPlayer.attachViews(layout, null, false, false)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().weight(1f)
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.weight(1f).fillMaxWidth().background(PanelColor, RoundedCornerShape(18.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("S", fontSize = 112.sp, color = AccentColor, fontWeight = FontWeight.ExtraBold)
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = {
-                            if (playbackPlaying) mediaPlayer.pause() else mediaPlayer.play()
-                            playbackPlaying = !playbackPlaying
-                        }) { Text(if (playbackPlaying) "Пауза" else "Продолжить") }
-                        Button(onClick = {
-                            mediaPlayer.stop()
-                            nowPlaying = null
-                            videoMode = false
-                            playbackPlaying = false
-                        }) { Text("Стоп") }
-                    }
-                }
-            } else {
-                Column(modifier = Modifier.weight(1.05f).fillMaxSize(), verticalArrangement = Arrangement.Center) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(250.dp).background(PanelColor, RoundedCornerShape(22.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("♫", fontSize = 76.sp, color = AccentColor)
-                            Text("SPlay", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
-                            Text("Твоя музыка и видео", color = Color.LightGray, fontSize = 16.sp)
-                        }
-                    }
+                    Text(errorText!!, color = Color(0xFFFF8D8D), fontSize = 13.sp, maxLines = 2)
                 }
             }
         }
