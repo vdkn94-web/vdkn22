@@ -274,6 +274,7 @@ private fun SPlayApp() {
     var queueIndex by remember { mutableStateOf(-1) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
+    val contentFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
     val artCache = remember { MediaArtCache(context) { path, destination -> browser.copyToFile(path, destination) } }
 
@@ -441,6 +442,11 @@ private fun SPlayApp() {
         }
     }
 
+    val activeArt = mediaArts[nowPlaying?.path]
+    val activeArtBitmap = remember(activeArt?.image?.absolutePath) {
+        activeArt?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() }
+    }
+
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         if (nowPlaying != null) {
             Column(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
@@ -457,7 +463,7 @@ private fun SPlayApp() {
                 if (controlsVisible) Row(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("SPlay", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(Modifier.width(16.dp))
-                    Text(nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
+                    Text(activeArt?.title ?: nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
                     TextButton(onClick = {
                         mediaPlayer.stop()
                         try { mediaPlayer.detachViews() } catch (_: Exception) { }
@@ -476,9 +482,14 @@ private fun SPlayApp() {
                 } else {
                     Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF101010)), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("♫", fontSize = 88.sp, color = AccentColor)
-                            Text(nowPlaying!!.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                            Text("Воспроизведение аудио", color = Color.LightGray, fontSize = 14.sp)
+                            if (activeArtBitmap != null) {
+                                Image(activeArtBitmap, contentDescription = "Обложка альбома", modifier = Modifier.width(240.dp).height(240.dp), contentScale = ContentScale.Crop)
+                            } else {
+                                Text("♫", fontSize = 88.sp, color = AccentColor)
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            Text(activeArt?.title ?: nowPlaying!!.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            Text(activeArt?.artist ?: "Воспроизведение аудио", color = Color.LightGray, fontSize = 14.sp, maxLines = 1)
                         }
                     }
                 }
@@ -519,6 +530,7 @@ private fun SPlayApp() {
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     sidebarExpanded = false
+                                    scope.launch { delay(100); contentFocusRequester.requestFocus() }
                                     true
                                 } else false
                             }
@@ -539,6 +551,8 @@ private fun SPlayApp() {
                 }
                 Column(
                     Modifier.weight(1f).fillMaxSize().padding(horizontal = 30.dp, vertical = 22.dp)
+                        .focusRequester(contentFocusRequester)
+                        .focusable()
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && connected && !sidebarExpanded) {
                                 sidebarExpanded = true
