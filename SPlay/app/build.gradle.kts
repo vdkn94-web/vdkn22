@@ -53,6 +53,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.hierynomus:smbj:0.13.0")
     implementation("org.videolan.android:libvlc-all:3.7.7")
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:7.1.7")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
