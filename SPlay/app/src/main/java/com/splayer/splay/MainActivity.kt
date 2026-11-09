@@ -272,6 +272,7 @@ private fun SPlayApp() {
 
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         Row(modifier = Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+            if (!fullscreen) {
             Column(modifier = Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState())) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("SPlay", fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = (-1).sp)
@@ -310,6 +311,17 @@ private fun SPlayApp() {
                         }) { Text("Отключиться") }
                     }
                     Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        listOf("Все файлы", "Видео", "Музыка").forEach { section ->
+                            TextButton(onClick = { mediaSection = section }) {
+                                Text(section, color = if (mediaSection == section) AccentColor else Color.LightGray,
+                                    fontWeight = if (mediaSection == section) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                        TextButton(onClick = { gridMode = !gridMode }) {
+                            Text(if (gridMode) "☷ Список" else "▦ Плитка", color = AccentColor)
+                        }
+                    }
                     if (currentPath.isNotBlank()) {
                         TextButton(onClick = { refresh(currentPath.substringBeforeLast('\\', "")) }) {
                             Text("← На уровень выше")
@@ -320,11 +332,43 @@ private fun SPlayApp() {
                     } else if (entries.isEmpty()) {
                         Text("В этой папке пока нет файлов", color = Color.LightGray)
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                            items(entries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, onClick = {
-                                    if (entry.directory) refresh(entry.path) else play(entry)
-                                })
+                        val visibleEntries = entries.filter { entry ->
+                            entry.directory || when (mediaSection) {
+                                "Видео" -> isVideo(entry.name)
+                                "Музыка" -> isAudio(entry.name)
+                                else -> true
+                            }
+                        }
+                        if (!gridMode) {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                items(visibleEntries, key = { it.path }) { entry ->
+                                    EntryRow(entry = entry, onClick = {
+                                        if (entry.directory) refresh(entry.path) else play(entry)
+                                    })
+                                }
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                visibleEntries.chunked(2).forEach { pair ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        pair.forEach { entry ->
+                                            Card(
+                                                modifier = Modifier.weight(1f).height(112.dp).clickable {
+                                                    if (entry.directory) refresh(entry.path) else play(entry)
+                                                }.focusable(),
+                                                colors = CardDefaults.cardColors(containerColor = PanelColor),
+                                                shape = RoundedCornerShape(14.dp)
+                                            ) {
+                                                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                                                    Text(if (entry.directory) "📁" else if (isAudio(entry.name)) "♫" else "▶", fontSize = 24.sp)
+                                                    Spacer(Modifier.height(7.dp))
+                                                    Text(entry.name, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                                                }
+                                            }
+                                        }
+                                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
                     }
@@ -335,12 +379,18 @@ private fun SPlayApp() {
                     Text(errorText!!, color = Color(0xFFFF8D8D), fontSize = 14.sp)
                 }
             }
+            }
 
             if (nowPlaying != null) {
-                Column(modifier = Modifier.weight(1.05f).fillMaxSize()) {
+                Column(modifier = Modifier.weight(if (fullscreen) 1f else 1.05f).fillMaxSize()) {
                     Text("NOW PLAYING", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(nowPlaying!!.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(nowPlaying!!.name, modifier = Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                        TextButton(onClick = { fullscreen = !fullscreen }) {
+                            Text(if (fullscreen) "Свернуть" else "На весь экран", color = AccentColor)
+                        }
+                    }
                     Spacer(Modifier.height(14.dp))
                     if (videoMode) {
                         AndroidView(
