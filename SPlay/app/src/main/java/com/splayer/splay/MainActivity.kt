@@ -418,11 +418,11 @@ private fun SPlayApp() {
         if (host.isNotBlank() && shareName.isNotBlank()) connect()
     }
 
-    LaunchedEffect(sidebarExpanded, busy, entries.firstOrNull()?.path) {
+    LaunchedEffect(sidebarExpanded, busy, entries.firstOrNull()?.path, showSettings, showSearch) {
         if (sidebarExpanded) {
             delay(60)
             sidebarFocusRequester.requestFocus()
-        } else if (connected && nowPlaying == null && !busy && entries.isNotEmpty()) {
+        } else if (connected && nowPlaying == null && !showSettings && !showSearch && !busy && entries.isNotEmpty()) {
             delay(100)
             contentFocusRequester.requestFocus()
         }
