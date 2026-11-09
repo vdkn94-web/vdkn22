@@ -21,8 +21,7 @@ data class MediaArtResult(
 
 /**
  * Persistent artwork cache (2 GiB max) with two active jobs and two waiting jobs.
- * Source media is staged temporarily because SMB paths are not seekable FFmpeg inputs;
- * temporary source files are deleted as soon as extraction finishes.
+ * SMB bytes are streamed through named pipes; large videos are not copied to local storage.
  */
 class MediaArtCache(
     context: Context,
