@@ -282,8 +282,12 @@ private fun SPlayApp() {
 
     fun requestMediaArt(entry: RemoteEntry, audio: Boolean) {
         if (mediaArts.containsKey(entry.path)) return
-        artCache.request(entry.path, audio) { result ->
+        val accepted = artCache.request(entry.path, audio) { result ->
             scope.launch { mediaArts = mediaArts + (entry.path to result) }
+        }
+        if (!accepted) scope.launch {
+            delay(800)
+            requestMediaArt(entry, audio)
         }
     }
 
