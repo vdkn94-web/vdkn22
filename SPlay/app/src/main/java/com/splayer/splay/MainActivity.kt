@@ -66,9 +66,9 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
-private val AppBackground = Color(0xFF0B1018)
-private val PanelColor = Color(0xFF151E2B)
-private val AccentColor = Color(0xFF63D6B2)
+private val AppBackground = Color(0xFF171717)
+private val PanelColor = Color(0xFF242424)
+private val AccentColor = Color(0xFFFF8800)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -158,6 +158,7 @@ private fun SPlayApp() {
 
     var host by rememberSaveable { mutableStateOf("") }
     var shareName by rememberSaveable { mutableStateOf("") }
+    var startFolder by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var domain by rememberSaveable { mutableStateOf("") }
@@ -199,12 +200,13 @@ private fun SPlayApp() {
         errorText = null
         scope.launch {
             try {
-                val rootEntries = withContext(Dispatchers.IO) {
+                val initialPath = startFolder.trim().replace("/", "\\").trim('\\')
+                val initialEntries = withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
-                    browser.list("")
+                    browser.list(initialPath)
                 }
-                entries = rootEntries
-                currentPath = ""
+                entries = initialEntries
+                currentPath = initialPath
                 connected = true
             } catch (e: Exception) {
                 connected = false
@@ -263,9 +265,9 @@ private fun SPlayApp() {
         Row(modifier = Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
             Column(modifier = Modifier.weight(1f).fillMaxSize()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("SPlay", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = AccentColor)
-                    Spacer(Modifier.width(12.dp))
-                    Text("SMB MEDIA PLAYER", color = Color.LightGray, fontSize = 13.sp)
+                    Text("SPlay", fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = (-1).sp)
+                    Spacer(Modifier.width(14.dp))
+                    Text("MEDIA PLAYER", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 }
                 Spacer(Modifier.height(20.dp))
 
@@ -274,6 +276,7 @@ private fun SPlayApp() {
                     Spacer(Modifier.height(14.dp))
                     OutlinedTextField(host, { host = it }, label = { Text("IP или имя сервера") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(shareName, { shareName = it }, label = { Text("Общая папка (share), например Media") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(startFolder, { startFolder = it }, label = { Text("Стартовая папка внутри share (необязательно)") }, placeholder = { Text("Например: Media/Movies") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(username, { username = it }, label = { Text("Пользователь (можно пусто для guest)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(password, { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(domain, { domain = it }, label = { Text("Домен (необязательно)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -282,11 +285,11 @@ private fun SPlayApp() {
                         Text(if (busy) "Подключаемся…" else "Подключиться")
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text("Поддерживается SMB2/SMB3. Укажи имя опубликованной папки OMV.", color = Color.LightGray, fontSize = 13.sp)
+                    Text("SMB2 / SMB3  •  Пустой путь откроет корень ресурса.", color = Color.LightGray, fontSize = 13.sp)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(shareName, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                            Text("SPlay", fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                             Text(if (currentPath.isBlank()) "Корень общей папки" else currentPath.replace("\\", "  /  "), color = Color.LightGray, fontSize = 13.sp)
                         }
                         TextButton(onClick = {
@@ -326,7 +329,7 @@ private fun SPlayApp() {
 
             if (nowPlaying != null) {
                 Column(modifier = Modifier.weight(1.05f).fillMaxSize()) {
-                    Text("СЕЙЧАС ИГРАЕТ", color = AccentColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("NOW PLAYING", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Spacer(Modifier.height(8.dp))
                     Text(nowPlaying!!.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                     Spacer(Modifier.height(14.dp))
@@ -345,7 +348,7 @@ private fun SPlayApp() {
                             modifier = Modifier.weight(1f).fillMaxWidth().background(PanelColor, RoundedCornerShape(18.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("♫", fontSize = 90.sp, color = AccentColor)
+                            Text("S", fontSize = 112.sp, color = AccentColor, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -369,8 +372,8 @@ private fun SPlayApp() {
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("♫", fontSize = 76.sp, color = AccentColor)
-                            Text("Твоя музыка и видео", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Выбери файл в сетевой папке", color = Color.LightGray, fontSize = 14.sp)
+                            Text("SPlay", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("Твоя музыка и видео", color = Color.LightGray, fontSize = 16.sp)
                         }
                     }
                 }
