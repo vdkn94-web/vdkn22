@@ -684,13 +684,13 @@ private fun EntryRow(entry: RemoteEntry, onClick: () -> Unit) {
 
 @Composable
 private fun VideoTile(entry: RemoteEntry, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().height(190.dp).clickable(onClick = onClick).focusable(),
-        colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(14.dp)) {
+    Card(modifier = Modifier.fillMaxWidth().height(154.dp).clickable(onClick = onClick).focusable(),
+        colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
         Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
-                Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(48.dp).height(48.dp))
+            Box(Modifier.fillMaxWidth().height(104.dp).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
+                Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(36.dp).height(36.dp))
             }
-            Text(entry.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.fillMaxWidth().padding(12.dp))
+            Text(entry.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
         }
     }
 }
