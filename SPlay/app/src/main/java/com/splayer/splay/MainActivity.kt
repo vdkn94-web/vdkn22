@@ -250,7 +250,6 @@ private fun SPlayApp() {
     val preferences = remember { context.getSharedPreferences("splay_settings", android.content.Context.MODE_PRIVATE) }
     var host by rememberSaveable { mutableStateOf(preferences.getString("host", "") ?: "") }
     var shareName by rememberSaveable { mutableStateOf(preferences.getString("share", "") ?: "") }
-    val startFolder = ""
     var videoFolder by rememberSaveable { mutableStateOf(preferences.getString("video_folder", "") ?: "") }
     var musicFolder by rememberSaveable { mutableStateOf(preferences.getString("music_folder", "") ?: "") }
     var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
@@ -457,9 +456,7 @@ private fun SPlayApp() {
     }
 
     val activeArt = mediaArts[nowPlaying?.path]
-    val activeArtBitmap = remember(activeArt?.image?.absolutePath) {
-        activeArt?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() }
-    }
+    val activeArtBitmap = rememberArtworkBitmap(activeArt?.image)
 
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         if (nowPlaying != null) {
@@ -545,8 +542,6 @@ private fun SPlayApp() {
                             .width(if (sidebarExpanded) 232.dp else 72.dp)
                             .fillMaxSize()
                             .background(Color(0xAA151D29))
-                            .focusRequester(sidebarFocusRequester)
-                            .focusable()
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     sidebarExpanded = false
@@ -561,7 +556,7 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(videoFolder.trim().replace("/", "\\").trim('\\')) }
+                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded, modifier = Modifier.focusRequester(sidebarFocusRequester)) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(videoFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(musicFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
@@ -593,7 +588,6 @@ private fun SPlayApp() {
                             OutlinedTextField(host, { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.weight(1f))
                             OutlinedTextField(shareName, { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.weight(1f))
                         }
-                        OutlinedTextField(startFolder, { startFolder = it; preferences.edit().putString("start_folder", it).apply() }, label = { Text("Начальная папка (необязательно)") }, placeholder = { Text("Movies") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             OutlinedTextField(username, { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.weight(1f))
                             OutlinedTextField(password, { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.weight(1f))
@@ -674,11 +668,11 @@ private fun SPlayApp() {
 }
 
 @Composable
-private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, expanded: Boolean, onClick: () -> Unit) {
+private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, expanded: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         color = if (selected) Color(0x553F5F91) else Color.Transparent,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).focusable()
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).focusable()
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 0.dp, vertical = 14.dp),
@@ -695,9 +689,26 @@ private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, exp
 }
 
 @Composable
+private fun rememberArtworkBitmap(file: File?): androidx.compose.ui.graphics.ImageBitmap? {
+    var bitmap by remember(file?.absolutePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(file?.absolutePath) {
+        bitmap = withContext(Dispatchers.IO) {
+            if (file == null || !file.isFile) null else {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(file.absolutePath, bounds)
+                val sample = maxOf(1, maxOf(bounds.outWidth / 640, bounds.outHeight / 640))
+                val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                BitmapFactory.decodeFile(file.absolutePath, options)?.asImageBitmap()
+            }
+        }
+    }
+    return bitmap
+}
+
+@Composable
 private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
     LaunchedEffect(entry.path) { if (!entry.directory && isAudio(entry.name)) requestArt() }
-    val artBitmap = remember(art?.image?.absolutePath) { art?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() } }
+    val artBitmap = rememberArtworkBitmap(art?.image)
     Card(
         modifier = Modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor),
@@ -750,7 +761,7 @@ private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () ->
 @Composable
 private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, onClick: () -> Unit) {
     LaunchedEffect(entry.path) { if (!entry.directory && isVideo(entry.name)) requestArt() }
-    val artBitmap = remember(art?.image?.absolutePath) { art?.image?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath)?.asImageBitmap() } }
+    val artBitmap = rememberArtworkBitmap(art?.image)
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
         Column(Modifier.fillMaxWidth()) {
