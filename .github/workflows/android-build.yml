@@ -3,9 +3,6 @@ name: Android build
 on:
   push:
     branches: [ main, feature/smb-tv-player ]
-  pull_request:
-    branches: [ main ]
-
 concurrency:
   group: android-build-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
