@@ -175,11 +175,11 @@ private class SmbBrowser {
     }
 
     fun disconnect() {
+        closeListing()
         try { share?.close() } catch (_: Exception) { }
         try { session?.close() } catch (_: Exception) { }
         try { connection?.close() } catch (_: Exception) { }
         try { client?.close() } catch (_: Exception) { }
-        closeListing()
         share = null
         session = null
         connection = null
