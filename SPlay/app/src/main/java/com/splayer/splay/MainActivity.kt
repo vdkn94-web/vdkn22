@@ -3,6 +3,7 @@ package com.splayer.splay
 import android.net.Uri
 import android.graphics.BitmapFactory
 import java.io.File
+import java.io.FileOutputStream
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -210,7 +211,7 @@ private class SmbBrowser {
         listingPath = null
     }
 
-    fun copyToFile(path: String, destination: File) {
+    fun copyToPipe(path: String, pipePath: String) {
         val activeShare = share ?: error("Нет SMB-подключения")
         val remote = activeShare.openFile(
             path,
@@ -222,7 +223,7 @@ private class SmbBrowser {
         )
         remote.use { file ->
             file.inputStream.use { input ->
-                destination.outputStream().use { output -> input.copyTo(output, 256 * 1024) }
+                FileOutputStream(pipePath).use { output -> input.copyTo(output, 256 * 1024) }
             }
         }
     }
@@ -278,7 +279,7 @@ private fun SPlayApp() {
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
     val contentFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
-    val artCache = remember { MediaArtCache(context) { path, destination -> browser.copyToFile(path, destination) } }
+    val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
 
     fun requestMediaArt(entry: RemoteEntry, audio: Boolean) {
         if (mediaArts.containsKey(entry.path)) return
