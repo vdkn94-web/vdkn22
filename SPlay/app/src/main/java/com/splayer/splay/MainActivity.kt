@@ -73,6 +73,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -541,7 +542,7 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.Home, "Файлы", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; showSearch = false; sidebarExpanded = false }
+                        SidebarItem(Icons.Filled.Home, "Файлы", mediaSection == "Все", sidebarExpanded) { mediaSection = "Все"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(startFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(videoFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(musicFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
