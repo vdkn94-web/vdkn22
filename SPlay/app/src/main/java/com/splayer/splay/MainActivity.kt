@@ -335,6 +335,10 @@ private fun SPlayApp() {
             nowPlaying = null
             videoMode = false
             playbackPlaying = false
+        } else if (sidebarExpanded) {
+            sidebarExpanded = false
+        } else if (showSettings) {
+            showSettings = false
         } else {
             val parent = currentPath.substringBeforeLast('\\', "")
             refresh(parent)
