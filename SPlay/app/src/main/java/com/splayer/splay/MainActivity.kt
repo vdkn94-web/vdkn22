@@ -2,8 +2,9 @@ package com.splayer.splay
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,6 +46,8 @@ private enum class Section(val title: String, val icon: String) {
 }
 
 class MainActivity : ComponentActivity() {
+    private val libraryViewModel: MediaLibraryViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppContextHolder.context = applicationContext
@@ -50,7 +55,7 @@ class MainActivity : ComponentActivity() {
         SPlayLog.info("App", "SPlay 2.0 started")
         setContent {
             MaterialTheme {
-                SPlayApp(onExportLogs = { createLogExport() })
+                SPlayApp(libraryViewModel, onExportLogs = { createLogExport() })
             }
         }
     }
@@ -81,7 +86,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SPlayApp(onExportLogs: () -> Unit) {
+private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit) {
     var selected by remember { mutableStateOf(Section.VIDEO) }
     var settingsTab by remember { mutableStateOf("Подключение") }
     var search by remember { mutableStateOf("") }
@@ -91,6 +96,8 @@ private fun SPlayApp(onExportLogs: () -> Unit) {
     var username by remember { mutableStateOf(SecurePreferences.get("username")) }
     var password by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Укажите SMB-сервер и папку с файлами") }
+    val videoState by viewModel.video.collectAsState()
+    val musicState by viewModel.music.collectAsState()
 
     BackHandler(enabled = selected != Section.VIDEO) { selected = Section.VIDEO }
 
@@ -120,20 +127,46 @@ private fun SPlayApp(onExportLogs: () -> Unit) {
                 when (selected) {
                     Section.VIDEO -> {
                         Text("Видео", fontSize = 30.sp, color = Color.White)
-                        Spacer(Modifier.height(14.dp))
-                        Text("Список видеоклипов появится после настройки SMB", color = Color(0xFFADB5C2))
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                            Button(onClick = { viewModel.scan(MediaKind.VIDEO) }, enabled = !videoState.scanning) {
+                                Text(if (videoState.scanning) "Сканирование…" else "Сканировать видео")
+                            }
+                            Text(
+                                if (videoState.scanning) "Папок: ${videoState.visitedFolders} · Файлов: ${videoState.foundFiles}"
+                                else videoState.message,
+                                color = Color(0xFFADB5C2),
+                                fontSize = 14.sp
+                            )
+                        }
                         Spacer(Modifier.height(12.dp))
-                        Text(status, color = Color(0xFF8F98A6), fontSize = 14.sp)
+                        MediaList(videoState.items, "Видео пока не найдены")
                     }
                     Section.MUSIC -> {
                         Text("Музыка", fontSize = 30.sp, color = Color.White)
-                        Spacer(Modifier.height(14.dp))
-                        Text("Список музыкальных треков появится после настройки SMB", color = Color(0xFFADB5C2))
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                            Button(onClick = { viewModel.scan(MediaKind.MUSIC) }, enabled = !musicState.scanning) {
+                                Text(if (musicState.scanning) "Сканирование…" else "Сканировать музыку")
+                            }
+                            Text(
+                                if (musicState.scanning) "Папок: ${musicState.visitedFolders} · Треков: ${musicState.foundFiles}"
+                                else musicState.message,
+                                color = Color(0xFFADB5C2),
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        MediaList(musicState.items, "Музыкальные треки пока не найдены")
                     }
                     Section.SEARCH -> {
                         Text("Поиск", fontSize = 30.sp, color = Color.White)
                         Spacer(Modifier.height(18.dp))
                         AppInput(search, { search = it }, "Название файла")
+                        val found = (videoState.items + musicState.items).filter {
+                            it.name.contains(search, ignoreCase = true)
+                        }
+                        MediaList(found, "Ничего не найдено")
                     }
                     Section.SETTINGS -> {
                         Text("Настройки", fontSize = 30.sp, color = Color.White)
@@ -152,15 +185,27 @@ private fun SPlayApp(onExportLogs: () -> Unit) {
                                 AppInput(share, { share = it }, "Общая папка SMB")
                                 AppInput(username, { username = it }, "Логин")
                                 AppInput(password, { password = it }, "Пароль", secret = true)
-                                Button(onClick = {
-                                    SecurePreferences.put("server", server)
-                                    SecurePreferences.put("share", share)
-                                    SecurePreferences.put("username", username)
-                                    if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
-                                    password = ""
-                                    status = "Параметры подключения сохранены"
-                                    SPlayLog.info("Settings", "SMB connection settings saved")
-                                }) { Text("Сохранить подключение") }
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Button(onClick = {
+                                        SecurePreferences.put("server", server)
+                                        SecurePreferences.put("share", share)
+                                        SecurePreferences.put("username", username)
+                                        if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
+                                        password = ""
+                                        status = "Параметры подключения сохранены"
+                                        SPlayLog.info("Settings", "SMB connection settings saved")
+                                    }) { Text("Сохранить подключение") }
+                                    Button(onClick = {
+                                        SecurePreferences.put("server", server)
+                                        SecurePreferences.put("share", share)
+                                        SecurePreferences.put("username", username)
+                                        if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
+                                        password = ""
+                                        viewModel.testConnection { status = it }
+                                    }) { Text("Проверить соединение") }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Text(status, color = Color(0xFFADB5C2), fontSize = 14.sp)
                             }
                             "Папка к файлам" -> {
                                 AppInput(folder, { folder = it }, "Путь внутри общей папки")
@@ -176,6 +221,32 @@ private fun SPlayApp(onExportLogs: () -> Unit) {
                                 Button(onClick = onExportLogs) { Text("Сохранить логи в TXT") }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaList(items: List<MediaItem>, emptyMessage: String) {
+    if (items.isEmpty()) {
+        Text(emptyMessage, color = Color(0xFF8F98A6), fontSize = 15.sp)
+    } else {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            items(items, key = { it.path }) { item ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF222832))
+                ) {
+                    Row(
+                        Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(if (item.kind == MediaKind.VIDEO) "▶" else "♫", color = Color(0xFF93B9E2))
+                        Spacer(Modifier.width(12.dp))
+                        Text(item.name, color = Color.White, fontSize = 15.sp)
                     }
                 }
             }
