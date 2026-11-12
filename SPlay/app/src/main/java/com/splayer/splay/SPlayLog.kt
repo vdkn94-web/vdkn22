@@ -9,6 +9,26 @@ object SPlayLog {
     private const val TAG = "SPlay"
     private const val MAX_BYTES = 1_500_000L
     @Volatile private var installed = false
+    @Volatile private var loggingEnabled = true
+
+    fun isEnabled(context: Context): Boolean {
+        loggingEnabled = context.getSharedPreferences("splay_logging", Context.MODE_PRIVATE).getBoolean("enabled", true)
+        return loggingEnabled
+    }
+
+    fun setEnabled(context: Context, enabled: Boolean) {
+        loggingEnabled = enabled
+        context.getSharedPreferences("splay_logging", Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply()
+        if (enabled) info("Logs", "Logging enabled", context)
+    }
+
+    fun clear(context: Context) {
+        synchronized(this) {
+            file(context).delete()
+            File(context.filesDir, "splay-logs.previous.txt").delete()
+        }
+        if (isEnabled(context)) info("Logs", "Log cleared", context)
+    }
 
     fun install(context: Context) {
         if (installed) return
@@ -29,6 +49,8 @@ object SPlayLog {
     fun error(area: String, message: String, error: Throwable? = null, context: Context? = null) = write("E", area, message, error, context)
 
     private fun write(level: String, area: String, message: String, error: Throwable?, context: Context?) {
+        val appContext = context?.applicationContext ?: AppContextHolder.context
+        if (appContext != null && !isEnabled(appContext)) return
         val line = "${System.currentTimeMillis()} $level/$area: $message" +
             (error?.let { "\n${Log.getStackTraceString(it)}" } ?: "") + "\n"
         runCatching {
