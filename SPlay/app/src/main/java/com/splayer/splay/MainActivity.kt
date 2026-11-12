@@ -186,7 +186,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     queueIndex++
                     activeItem = queue[queueIndex]
                 }
-            }
+            },
+            onStop = { activeItem = null }
         )
         return
     }
