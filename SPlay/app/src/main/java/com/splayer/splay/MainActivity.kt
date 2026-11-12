@@ -109,6 +109,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
     var username by remember { mutableStateOf(SecurePreferences.get("username")) }
     var password by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Укажите SMB-сервер и папку с файлами") }
+    var loggingEnabled by remember { mutableStateOf(SPlayLog.isEnabled(context)) }
     var activeItem by remember { mutableStateOf<MediaItem?>(null) }
     var queue by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var queueIndex by remember { mutableIntStateOf(0) }
@@ -309,7 +310,18 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             "Логи" -> {
                                 Text("Журнал ошибок и событий приложения", color = Color(0xFFADB5C2))
                                 Spacer(Modifier.height(12.dp))
-                                Button(onClick = onExportLogs) { Text("Сохранить логи в TXT") }
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Button(onClick = onExportLogs) { Text("Сохранить логи в TXT") }
+                                    Button(onClick = {
+                                        SPlayLog.clear(context)
+                                    }) { Text("Очистить лог") }
+                                    Button(onClick = {
+                                        loggingEnabled = !loggingEnabled
+                                        SPlayLog.setEnabled(context, loggingEnabled)
+                                    }) { Text(if (loggingEnabled) "Отключить лог" else "Включить лог") }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(if (loggingEnabled) "Запись логов включена" else "Запись логов отключена", color = Color(0xFFADB5C2), fontSize = 13.sp)
                             }
                         }
                         }
