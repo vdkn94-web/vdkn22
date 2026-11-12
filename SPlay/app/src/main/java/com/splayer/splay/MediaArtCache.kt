@@ -20,8 +20,8 @@ data class MediaArtResult(
 )
 
 /**
- * Persistent artwork cache (2 GiB max) with two active jobs and two waiting jobs.
- * SMB bytes are streamed through named pipes; large videos are not copied to local storage.
+ * Persistent artwork cache (5 GiB max) with two active jobs and two waiting jobs.
+ * SMB bytes are streamed through named pipes; only compressed 320px artwork is stored locally.
  */
 class MediaArtCache(
     private val context: Context,
@@ -70,7 +70,7 @@ class MediaArtCache(
                         } else {
                             val extracted = withPipe(entryPath) { pipe ->
                                 FFmpegKit.execute(
-                                    "-y -i ${quote(pipe)} -map 0:v:0 -frames:v 1 -vf scale=640:-2 -q:v 3 ${quote(output.absolutePath)}"
+                                    "-y -i ${quote(pipe)} -map 0:v:0 -frames:v 1 -vf scale=320:320:force_original_aspect_ratio=decrease -q:v 6 ${quote(output.absolutePath)}"
                                 )
                             }
                             if (ReturnCode.isSuccess(extracted.returnCode) && output.isFile && output.length() > 0L) output else null
@@ -79,14 +79,18 @@ class MediaArtCache(
                     } else {
                         val extracted = withPipe(entryPath) { pipe ->
                             FFmpegKit.execute(
-                                "-y -i ${quote(pipe)} -ss 7 -frames:v 1 -vf scale=480:-2 -q:v 3 ${quote(output.absolutePath)}"
+                                "-y -i ${quote(pipe)} -ss 7 -frames:v 1 -vf scale=320:180:force_original_aspect_ratio=decrease -q:v 6 ${quote(output.absolutePath)}"
                             )
                         }
                         val thumb = if (ReturnCode.isSuccess(extracted.returnCode) && output.isFile && output.length() > 0L) output else null
                         result = MediaArtResult(thumb)
                     }
                     trimCache()
-                } catch (_: Exception) {
+                } catch (error: LinkageError) {
+                    SPlayLog.add("Artwork native/dependency error for ${entryPath}: ${error.message}")
+                    if (output.length() == 0L) output.delete()
+                } catch (error: Exception) {
+                    SPlayLog.add("Artwork extraction failed for ${entryPath}: ${error.message}")
                     if (output.length() == 0L) output.delete()
                 } finally {
                     inFlight.remove(key)
@@ -144,6 +148,6 @@ class MediaArtCache(
     private fun quote(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     companion object {
-        private const val MAX_CACHE_BYTES = 2L * 1024L * 1024L * 1024L
+        private const val MAX_CACHE_BYTES = 5L * 1024L * 1024L * 1024L
     }
 }
