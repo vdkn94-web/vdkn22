@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.splayer.splay"
-    compileSdk { version = release(37) }
+    compileSdk { version = release(36) }
 
     defaultConfig {
         applicationId = "com.splayer.splay"
