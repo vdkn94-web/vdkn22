@@ -5,9 +5,12 @@ import android.graphics.BitmapFactory
 import java.io.File
 import java.io.FileOutputStream
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.aspectRatio
@@ -76,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -103,6 +107,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.Channel
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -112,9 +117,42 @@ private val AppBackground = Color(0xFF0B1018)
 private val PanelColor = Color(0xB8202938)
 private val AccentColor = Color(0xFF9BB7FF)
 
+private object SPlayLog {
+    private val lock = Any()
+    @Volatile private var logFile: File? = null
+    fun init(context: android.content.Context) {
+        logFile = File(context.filesDir, "splay-logs.txt")
+        add("SPlay started")
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            add("FATAL on ${thread.name}: ${error.stackTraceToString()}")
+            previous?.uncaughtException(thread, error)
+        }
+    }
+    fun add(message: String) {
+        val line = "${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}  $message"
+        Log.e("SPlay", line)
+        synchronized(lock) {
+            val file = logFile ?: return
+            try {
+                file.appendText(line + "\n")
+                if (file.length() > 1_500_000L) file.writeText(file.readLines().takeLast(5000).joinToString("\n") + "\n")
+            } catch (_: Exception) { }
+        }
+    }
+    fun read(context: android.content.Context): String = synchronized(lock) {
+        runCatching { File(context.filesDir, "splay-logs.txt").takeIf { it.isFile }?.readText() ?: "Лог пока пуст" }.getOrDefault("Не удалось прочитать лог")
+    }
+    fun clear(context: android.content.Context) {
+        synchronized(lock) { runCatching { File(context.filesDir, "splay-logs.txt").writeText("") } }
+        add("Log cleared")
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SPlayLog.init(applicationContext)
         window.statusBarColor = android.graphics.Color.rgb(11, 16, 24)
         window.navigationBarColor = android.graphics.Color.rgb(11, 16, 24)
         setContent {
@@ -204,6 +242,58 @@ private class SmbBrowser {
         return Pair(result, hasMore)
     }
 
+
+    fun scanVideos(rootPath: String, onBatch: (List<RemoteEntry>) -> Unit) {
+        val activeShare = share ?: error("Сначала подключись к SMB-папке")
+        closeListing()
+        val pending = java.util.ArrayDeque<String>()
+        val visited = HashSet<String>()
+        val batch = ArrayList<RemoteEntry>(40)
+        pending.add(rootPath)
+        var scannedDirectories = 0
+        var foundVideos = 0
+        SPlayLog.add("Video scan started: $rootPath")
+        while (pending.isNotEmpty()) {
+            val dirPath = pending.removeFirst()
+            if (!visited.add(dirPath)) continue
+            scannedDirectories++
+            if (scannedDirectories > 20000) error("Слишком много папок: остановлено после 20000")
+            val directory = activeShare.openDirectory(
+                dirPath,
+                EnumSet.of(AccessMask.FILE_LIST_DIRECTORY, AccessMask.FILE_READ_ATTRIBUTES, AccessMask.FILE_READ_EA),
+                null,
+                EnumSet.allOf(SMB2ShareAccess::class.java),
+                SMB2CreateDisposition.FILE_OPEN,
+                null
+            )
+            try {
+                val iterator = directory.iterator()
+                while (iterator.hasNext()) {
+                    val item = iterator.next()
+                    val name = item.fileName
+                    if (name == "." || name == "..") continue
+                    val isDirectory = EnumWithValue.EnumUtils.isSet(item.fileAttributes, FileAttributes.FILE_ATTRIBUTE_DIRECTORY)
+                    val childPath = if (dirPath.isBlank()) name else "$dirPath\\$name"
+                    if (isDirectory) pending.addLast(childPath)
+                    else if (isVideo(name)) {
+                        batch.add(RemoteEntry(name, childPath, false))
+                        foundVideos++
+                        if (batch.size >= 40) {
+                            onBatch(batch.toList())
+                            batch.clear()
+                            SPlayLog.add("Video scan progress: $foundVideos files, $scannedDirectories folders")
+                        }
+                    }
+                    if (foundVideos > 100000) error("Слишком много видео: остановлено после 100000 файлов")
+                }
+            } finally {
+                try { directory.close() } catch (_: Exception) { }
+            }
+        }
+        if (batch.isNotEmpty()) onBatch(batch.toList())
+        SPlayLog.add("Video scan completed: $foundVideos videos in $scannedDirectories folders")
+    }
+
     private fun closeListing() {
         try { listingDirectory?.close() } catch (_: Exception) { }
         listingDirectory = null
@@ -258,6 +348,9 @@ private fun SPlayApp() {
     var mediaSection by rememberSaveable { mutableStateOf("Все") }
     var sidebarExpanded by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var settingsTab by rememberSaveable { mutableStateOf("Подключение") }
+    var scanningVideos by remember { mutableStateOf(false) }
+    var scannedVideoCount by remember { mutableStateOf(0) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var currentPath by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
@@ -280,6 +373,12 @@ private fun SPlayApp() {
     val sidebarFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
     val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
+    val saveLogsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) scope.launch(Dispatchers.IO) {
+            runCatching { context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(SPlayLog.read(context)) } }
+                .onFailure { SPlayLog.add("Log export failed: ${it.message}") }
+        }
+    }
 
     fun requestMediaArt(entry: RemoteEntry, audio: Boolean) {
         if (mediaArts.containsKey(entry.path)) return
@@ -304,6 +403,7 @@ private fun SPlayApp() {
                 currentPath = path
                 preferences.edit().putString("last_path", path).apply()
             } catch (e: Exception) {
+                SPlayLog.add("Folder listing failed at '$path': ${e.stackTraceToString()}")
                 errorText = e.message ?: "Не удалось прочитать папку"
             } finally {
                 busy = false
@@ -320,8 +420,47 @@ private fun SPlayApp() {
                 entries = entries + result.first
                 hasMoreEntries = result.second
             } catch (e: Exception) {
+                SPlayLog.add("Load-more failed: ${e.stackTraceToString()}")
                 errorText = e.message ?: "Не удалось загрузить следующие файлы"
             } finally {
+                busy = false
+            }
+        }
+    }
+
+
+    fun scanVideoLibrary(path: String) {
+        if (busy) return
+        busy = true
+        scanningVideos = true
+        scannedVideoCount = 0
+        entries = emptyList()
+        hasMoreEntries = false
+        errorText = null
+        currentPath = path
+        val batches = Channel<List<RemoteEntry>>(Channel.UNLIMITED)
+        val worker = scope.launch(Dispatchers.IO) {
+            try {
+                browser.scanVideos(path) { batch -> batches.trySend(batch) }
+                batches.close()
+            } catch (e: Exception) {
+                SPlayLog.add("Video scan failed: ${e.stackTraceToString()}")
+                batches.close(e)
+            }
+        }
+        scope.launch {
+            try {
+                for (batch in batches) {
+                    entries = entries + batch
+                    scannedVideoCount += batch.size
+                }
+                entries = entries.sortedBy { it.name.lowercase() }
+                preferences.edit().putString("last_path", path).apply()
+            } catch (e: Exception) {
+                errorText = e.message ?: "Не удалось просканировать видеопапку"
+            } finally {
+                worker.join()
+                scanningVideos = false
                 busy = false
             }
         }
@@ -348,6 +487,7 @@ private fun SPlayApp() {
                 preferences.edit().putString("last_path", initialPath).apply()
                 connected = true
             } catch (e: Exception) {
+                SPlayLog.add("SMB connect failed: ${e.stackTraceToString()}")
                 connected = false
                 errorText = e.message ?: "Не удалось подключиться к SMB"
             } finally {
@@ -379,6 +519,7 @@ private fun SPlayApp() {
             mediaPlayer.play()
             playbackPlaying = true
         } catch (e: Exception) {
+            SPlayLog.add("VLC playback failed for '${entry.path}': ${e.stackTraceToString()}")
             errorText = "VLC не смог открыть файл: ${e.message ?: "ошибка воспроизведения"}"
         }
     }
@@ -554,7 +695,7 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded, modifier = Modifier.focusRequester(sidebarFocusRequester)) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(videoFolder.trim().replace("/", "\\").trim('\\')) }
+                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded, modifier = Modifier.focusRequester(sidebarFocusRequester)) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; searchQuery = ""; scanVideoLibrary(videoFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(musicFolder.trim().replace("/", "\\").trim('\\')) }
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
@@ -595,23 +736,54 @@ private fun SPlayApp() {
                         Text("Поддерживаются SMB2 и SMB3", color = Color.Gray, fontSize = 12.sp)
                     }
                 } else if (showSettings) {
-                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                    Column(Modifier.fillMaxWidth().weight(1f)) {
                         Text("Настройки", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(18.dp))
-                        Text("СЕТЕВОЕ ПОДКЛЮЧЕНИЕ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = shareName, onValueChange = { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = videoFolder, onValueChange = { videoFolder = it }, label = { Text("Папка видео (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = musicFolder, onValueChange = { musicFolder = it }, label = { Text("Папка музыки (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        Text("Кэш обложек и превью: до 2 ГБ", color = Color.Gray, fontSize = 12.sp)
-                        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = domain, onValueChange = { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).remove("start_folder").putString("video_folder", videoFolder.trim()).putString("music_folder", musicFolder.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply(); connect() }, enabled = !busy) { Text("Сохранить и подключиться") }
-                            TextButton(onClick = { showSettings = false }) { Text("Готово", color = AccentColor) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            listOf("Подключение", "Папки", "Логи").forEach { tab ->
+                                if (settingsTab == tab) Button(onClick = { settingsTab = tab }) { Text(tab) }
+                                else TextButton(onClick = { settingsTab = tab }) { Text(tab, color = AccentColor) }
+                            }
                         }
+                        Spacer(Modifier.height(12.dp))
+                        when (settingsTab) {
+                            "Подключение" -> Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                                Text("СЕТЕВОЙ РЕСУРС SMB", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(value = shareName, onValueChange = { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(value = domain, onValueChange = { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                Spacer(Modifier.height(12.dp))
+                                Button(onClick = {
+                                    preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
+                                    SPlayLog.add("SMB connection settings saved")
+                                    errorText = "Параметры подключения сохранены"
+                                }) { Text("Сохранить подключение") }
+                            }
+                            "Папки" -> Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                                Text("ПУТИ ВНУТРИ ОБЩЕЙ ПАПКИ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                OutlinedTextField(value = videoFolder, onValueChange = { videoFolder = it }, label = { Text("Папка видео (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(value = musicFolder, onValueChange = { musicFolder = it }, label = { Text("Папка музыки (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                Text("Видеотека сканируется в фоне рекурсивно. Превью создаётся только у выбранного элемента, чтобы не перегружать ТВ.", color = Color.Gray, fontSize = 12.sp)
+                                Spacer(Modifier.height(12.dp))
+                                Button(onClick = {
+                                    preferences.edit().putString("video_folder", videoFolder.trim()).putString("music_folder", musicFolder.trim()).apply()
+                                    SPlayLog.add("Media folders saved: video='$videoFolder', music='$musicFolder'")
+                                    errorText = "Папки сохранены"
+                                }) { Text("Сохранить папки") }
+                            }
+                            else -> Column(Modifier.fillMaxWidth().weight(1f)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Button(onClick = { saveLogsLauncher.launch("SPlay-logs.txt") }) { Text("Сохранить TXT") }
+                                    TextButton(onClick = { SPlayLog.clear(context) }) { Text("Очистить") }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(SPlayLog.read(context).takeLast(12000), color = Color(0xFFB8C2D2), fontSize = 10.sp, lineHeight = 13.sp, modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()))
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { showSettings = false }) { Text("Готово", color = AccentColor) }
                     }
                 } else {
                     if (currentPath.isNotBlank()) {
@@ -628,6 +800,9 @@ private fun SPlayApp() {
                             else -> true
                         }) && entry.name.contains(searchQuery, ignoreCase = true)
                     }.sortedWith(compareByDescending<RemoteEntry> { it.directory }.thenBy { it.name.lowercase() })
+                    if (scanningVideos) {
+                        Text("Сканирование медиатеки… найдено $scannedVideoCount видео", color = AccentColor, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    }
                     if (busy && entries.isEmpty()) {
                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentColor) }
                     } else if (visibleEntries.isEmpty()) {
@@ -756,9 +931,8 @@ private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () ->
 
 @Composable
 private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    LaunchedEffect(entry.path) { if (!entry.directory && isVideo(entry.name)) requestArt() }
     val artBitmap = rememberArtworkBitmap(art?.image)
-    Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick).focusable(),
+    Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick).onFocusChanged { if (it.isFocused && !entry.directory) requestArt() }.focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
