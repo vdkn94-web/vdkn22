@@ -34,7 +34,13 @@ class MediaLibraryViewModel(application: Application) : AndroidViewModel(applica
             }
             _video.value = LibraryState(items = cached.first, message = cached.first.takeIf { it.isNotEmpty() }?.let { "Сохранённая библиотека: ${it.size}" } ?: "")
             _music.value = LibraryState(items = cached.second, message = cached.second.takeIf { it.isNotEmpty() }?.let { "Сохранённая библиотека: ${it.size}" } ?: "")
+            if (loadSettings().isConfigured()) scanAll()
         }
+    }
+
+    fun scanAll() {
+        scan(MediaKind.VIDEO)
+        scan(MediaKind.MUSIC)
     }
 
     fun scan(kind: MediaKind) {
