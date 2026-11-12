@@ -35,7 +35,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -107,11 +107,11 @@ fun PlaybackScreen(
                 val right = event.key == Key.DirectionRight
                 val left = event.key == Key.DirectionLeft
                 when {
-                    center && event.type == KeyEventType.KeyDown -> {
+                    center && native.action == android.view.KeyEvent.ACTION_DOWN -> {
                         if (centerDownAt == 0L) centerDownAt = native.downTime
                         true
                     }
-                    center && event.type == KeyEventType.KeyUp -> {
+                    center && native.action == android.view.KeyEvent.ACTION_UP -> {
                         val heldMs = (native.eventTime - centerDownAt).coerceAtLeast(0L)
                         centerDownAt = 0L
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
@@ -145,7 +145,7 @@ fun PlaybackScreen(
                     PlayerView(viewContext).apply {
                         useController = false
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        player = playbackPlayer
+                        this.player = playbackPlayer
                         keepScreenOn = true
                         isFocusable = false
                         isFocusableInTouchMode = false
