@@ -233,32 +233,28 @@ fun PlaybackScreen(
                     Text(item.name, color = Color.White, fontSize = 15.sp, maxLines = 1)
                     Spacer(Modifier.height(4.dp))
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Button(onClick = onStop, modifier = focusModifier.focusRequester(playFocus)) {
-                        Text("■", color = Color.White, fontSize = 30.sp)
+                        Text("■", color = Color.White, fontSize = 27.sp)
+                    }
+                    Button(onClick = onPrevious, modifier = focusModifier) {
+                        Text("|◀", color = Color.White, fontSize = 25.sp)
                     }
                     Button(onClick = { player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L)) }, modifier = focusModifier) {
-                        Text("◀◀", color = Color.White, fontSize = 27.sp)
+                        Text("◀◀", color = Color.White, fontSize = 25.sp)
                     }
                     Button(onClick = { if (player.isPlaying) player.pause() else player.play() }, modifier = focusModifier) {
-                        Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 30.sp)
+                        Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 28.sp)
                     }
                     Button(onClick = { player.seekTo((player.currentPosition + 10_000L).coerceAtMost(if (duration > 0) duration else Long.MAX_VALUE)) }, modifier = focusModifier) {
-                        Text("▶▶", color = Color.White, fontSize = 27.sp)
-                    }
-                    Button(onClick = { player.volume = (player.volume + 0.1f).coerceAtMost(1f) }, modifier = focusModifier) {
-                        Text("◖))", color = Color.White, fontSize = 25.sp)
-                    }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = onPrevious, modifier = focusModifier) {
-                        Text("|◀", color = Color.White, fontSize = 27.sp)
-                    }
-                    Button(onClick = { if (player.isPlaying) player.pause() else player.play() }, modifier = focusModifier) {
-                        Text("Ⅱ", color = Color.White, fontSize = 30.sp)
+                        Text("▶▶", color = Color.White, fontSize = 25.sp)
                     }
                     Button(onClick = onNext, modifier = focusModifier) {
-                        Text("▶|", color = Color.White, fontSize = 27.sp)
+                        Text("▶|", color = Color.White, fontSize = 25.sp)
                     }
                     Button(onClick = {
                         player.repeatMode = when (player.repeatMode) {
@@ -267,10 +263,13 @@ fun PlaybackScreen(
                             else -> Player.REPEAT_MODE_OFF
                         }
                     }, modifier = focusModifier) {
-                        Text(if (player.repeatMode == Player.REPEAT_MODE_OFF) "↻" else "↻¹", color = Color.White, fontSize = 30.sp)
+                        Text(if (player.repeatMode == Player.REPEAT_MODE_OFF) "↻" else "↻¹", color = Color.White, fontSize = 27.sp)
                     }
                     Button(onClick = { player.shuffleModeEnabled = !player.shuffleModeEnabled }, modifier = focusModifier) {
-                        Text("⤨", color = Color.White, fontSize = 30.sp)
+                        Text("⤨", color = Color.White, fontSize = 27.sp)
+                    }
+                    Button(onClick = { player.volume = if (player.volume > 0f) 0f else 1f }, modifier = focusModifier) {
+                        Text(if (player.volume > 0f) "◖))" else "◖×", color = Color.White, fontSize = 23.sp)
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
