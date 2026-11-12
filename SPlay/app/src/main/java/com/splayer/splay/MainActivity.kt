@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -150,6 +151,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     }
                 }
                 exo.addListener(listener)
+                exo.shuffleModeEnabled = true
                 exo.prepare()
                 exo.playWhenReady = true
                 player = exo
@@ -232,8 +234,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                         )
                         Spacer(Modifier.height(12.dp))
                         MediaList(videoState.items, "Видео пока не найдены") { item ->
-                            queue = videoState.items
-                            queueIndex = videoState.items.indexOf(item)
+                            queue = listOf(item) + videoState.items.filterNot { it.path == item.path }.shuffled()
+                            queueIndex = 0
                             activeItem = item
                         }
                     }
@@ -248,8 +250,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                         )
                         Spacer(Modifier.height(12.dp))
                         MediaList(musicState.items, "Музыкальные треки пока не найдены") { item ->
-                            queue = musicState.items
-                            queueIndex = musicState.items.indexOf(item)
+                            queue = listOf(item) + musicState.items.filterNot { it.path == item.path }.shuffled()
+                            queueIndex = 0
                             activeItem = item
                         }
                     }
@@ -261,8 +263,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             it.name.contains(search, ignoreCase = true)
                         }
                         MediaList(found, "Ничего не найдено") { item ->
-                            queue = found
-                            queueIndex = found.indexOf(item)
+                            queue = listOf(item) + found.filterNot { it.path == item.path }.shuffled()
+                            queueIndex = 0
                             activeItem = item
                         }
                     }
@@ -338,16 +340,19 @@ private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick:
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             items(items, key = { it.path }) { item ->
+                var focused by remember(item.path) { mutableStateOf(false) }
                 Row(
-                    Modifier.fillMaxWidth().height(48.dp)
+                    Modifier.fillMaxWidth().height(52.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF222832))
+                        .onFocusChanged { focused = it.isFocused }
+                        .background(if (focused) Color(0xFF315B87) else Color(0xFF222832))
+                        .border(if (focused) 2.dp else 1.dp, if (focused) Color(0xFFB9DCFF) else Color(0xFF303946), RoundedCornerShape(8.dp))
                         .clickable { onItemClick(item) }
                         .focusable()
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(if (item.kind == MediaKind.VIDEO) "▶" else "♫", color = Color(0xFF93B9E2))
+                    Text(if (item.kind == MediaKind.VIDEO) "▶" else "♫", color = if (focused) Color.White else Color(0xFF93B9E2))
                     Spacer(Modifier.width(12.dp))
                     Text(item.name, color = Color.White, fontSize = 15.sp)
                 }
