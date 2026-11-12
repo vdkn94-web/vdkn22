@@ -106,12 +106,12 @@ fun PlaybackScreen(
                 } else if (key.action == AndroidKeyEvent.ACTION_UP) {
                     when (key.keyCode) {
                         AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (!longSeekRight) player.seekTo((player.currentPosition + 10_000L).coerceAtMost(if (player.duration > 0) player.duration else Long.MAX_VALUE))
+                            if (!longSeekRight) onNext()
                             longSeekRight = false
                             true
                         }
                         AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (!longSeekLeft) player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                            if (!longSeekLeft) onPrevious()
                             longSeekLeft = false
                             true
                         }
