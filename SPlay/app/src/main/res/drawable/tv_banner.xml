@@ -14,13 +14,13 @@
         android:fillColor="#FF777777"
         android:pathData="M46,47h15v15h-15z" />
     <path
-        android:fillColor="#FFFF8800"
+        android:fillColor="#FFFFFFFF"
         android:pathData="M58,43l12,7 -12,7z" />
     <path
         android:fillColor="#FFFFFFFF"
         android:pathData="M72,36 L117,65 L72,94 Z" />
     <path
-        android:fillColor="#FFFF8800"
+        android:fillColor="#FFFFFFFF"
         android:pathData="M43,117 C43,108 50,103 61,103h18v9h-18c-4,0 -6,2 -6,5 0,3 2,4 7,5l10,2c10,2 15,7 15,15 0,9 -7,14 -18,14h-21v-9h21c5,0 8,-2 8,-5 0,-3 -2,-5 -7,-6l-10,-2c-11,-2 -16,-6 -16,-14z" />
     <path
         android:fillColor="#FFFFFFFF"
