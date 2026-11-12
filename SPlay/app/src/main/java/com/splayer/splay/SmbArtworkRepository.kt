@@ -18,12 +18,39 @@ import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
+data class TrackInfo(val title: String, val artist: String, val cover: Bitmap?)
+
 class SmbArtworkRepository(context: Context) {
     private val appContext = context.applicationContext
     private val cacheDir = File(appContext.cacheDir, "music-artwork").apply { mkdirs() }
     private val memory = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 12L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+
+
+    suspend fun getTrackInfo(settings: SmbSettings, relativePath: String): TrackInfo =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val retriever = MediaMetadataRetriever()
+            var remote: RemoteArtworkSource? = null
+            try {
+                remote = RemoteArtworkSource(settings, relativePath)
+                retriever.setDataSource(remote)
+                val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                    ?.takeIf { it.isNotBlank() } ?: relativePath.substringAfterLast('/').substringBeforeLast('.')
+                val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+                    ?.takeIf { it.isNotBlank() } ?: "Неизвестный исполнитель"
+                val cover = retriever.embeddedPicture?.let { decodeCover(it) }
+                TrackInfo(title, artist, cover)
+            } catch (error: Exception) {
+                SPlayLog.warn("Metadata", "Could not read tags from $relativePath", error)
+                TrackInfo(relativePath.substringAfterLast('/').substringBeforeLast('.'), "Неизвестный исполнитель", null)
+            } finally {
+                runCatching { retriever.release() }
+                runCatching { remote?.close() }
+            }
+        }
 
     suspend fun get(settings: SmbSettings, relativePath: String): Bitmap? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
