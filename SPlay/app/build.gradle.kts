@@ -11,25 +11,32 @@ android {
 
     defaultConfig {
         applicationId = "com.splayer.splay"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
 
+    packaging {
+        jniLibs {
+            pickFirsts += "**/libc++_shared.so"
+        }
     }
 
     buildTypes {
         release {
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**", "org.videolan.**", "com.hierynomus.**")
             }
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     buildFeatures {
         compose = true
     }
@@ -46,6 +53,14 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.tv.foundation)
     implementation(libs.androidx.tv.material)
+
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.hierynomus:smbj:0.13.0")
+    implementation("org.videolan.android:libvlc-all:3.7.7")
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:7.1.6")
+
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

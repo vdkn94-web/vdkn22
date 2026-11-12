@@ -1,0 +1,71 @@
+name: Android build
+
+on:
+  push:
+    branches: [ main, feature/smb-tv-player ]
+
+concurrency:
+  group: android-build-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Clean and build debug APK
+        working-directory: SPlay
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-configuration-cache --no-build-cache clean :app:assembleDebug
+
+      - name: Verify APK package version
+        working-directory: SPlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          echo "$BADGING" | head -n 1
+          echo "$BADGING" | grep -F "package: name='com.splayer.splay' versionCode='2' versionName='1.1'"
+
+      - name: Prepare verified artifact
+        working-directory: SPlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verified-artifact
+          cp app/build/outputs/apk/debug/app-debug.apk verified-artifact/SPlay-SMB-v1.1-debug.apk
+          {
+            echo "applicationId=com.splayer.splay"
+            echo "versionCode=2"
+            echo "versionName=1.1"
+            echo "commit=${GITHUB_SHA}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+          } > verified-artifact/build-info.txt
+
+      - name: Upload verified debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPlay-SMB-v1.1-${{ github.run_number }}-${{ github.sha }}
+          path: SPlay/verified-artifact/*
+          if-no-files-found: error
