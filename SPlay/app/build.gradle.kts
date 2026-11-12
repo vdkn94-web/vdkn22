@@ -60,6 +60,7 @@ dependencies {
     implementation("com.hierynomus:smbj:0.13.0")
     implementation("org.videolan.android:libvlc-all:3.7.7")
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:7.1.6")
+    implementation("com.arthenica:smart-exception-java:0.2.1")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
