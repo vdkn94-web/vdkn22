@@ -35,7 +35,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.media3.common.Player
@@ -107,11 +107,11 @@ fun PlaybackScreen(
                 val right = event.key == Key.DirectionRight
                 val left = event.key == Key.DirectionLeft
                 when {
-                    center && event.type == KeyEventType.KeyDown -> {
+                    center && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN -> {
                         if (centerDownAt == 0L) centerDownAt = android.os.SystemClock.uptimeMillis()
                         true
                     }
-                    center && event.type == KeyEventType.KeyUp -> {
+                    center && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_UP -> {
                         val heldMs = (android.os.SystemClock.uptimeMillis() - centerDownAt).coerceAtLeast(0L)
                         centerDownAt = 0L
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
