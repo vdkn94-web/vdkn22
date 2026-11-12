@@ -26,10 +26,12 @@ class SmbArtworkRepository(context: Context) {
     private val memory = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 12L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+    private val metadataMemory = LruCache<String, TrackInfo>(64)
 
 
     suspend fun getTrackInfo(settings: SmbSettings, relativePath: String): TrackInfo =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            synchronized(metadataMemory) { metadataMemory.get(relativePath) }?.let { return@withContext it }
             val retriever = MediaMetadataRetriever()
             var remote: RemoteArtworkSource? = null
             try {
@@ -42,10 +44,14 @@ class SmbArtworkRepository(context: Context) {
                     ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
                     ?.takeIf { it.isNotBlank() } ?: "Неизвестный исполнитель"
                 val cover = retriever.embeddedPicture?.let { decodeCover(it) }
-                TrackInfo(title, artist, cover)
+                TrackInfo(title, artist, cover).also {
+                    synchronized(metadataMemory) { metadataMemory.put(relativePath, it) }
+                }
             } catch (error: Exception) {
                 SPlayLog.warn("Metadata", "Could not read tags from $relativePath", error)
-                TrackInfo(relativePath.substringAfterLast('/').substringBeforeLast('.'), "Неизвестный исполнитель", null)
+                TrackInfo(relativePath.substringAfterLast('/').substringBeforeLast('.'), "Неизвестный исполнитель", null).also {
+                    synchronized(metadataMemory) { metadataMemory.put(relativePath, it) }
+                }
             } finally {
                 runCatching { retriever.release() }
                 runCatching { remote?.close() }
