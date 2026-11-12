@@ -1,7 +1,6 @@
 package com.splayer.splay
 
 import android.content.Context
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +21,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.*
@@ -52,8 +52,20 @@ fun PlaybackScreen(
     var duration by remember(player) { mutableLongStateOf(0L) }
     var controlsVisible by remember(item.path) { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
-    var longSeekLeft by remember { mutableStateOf(false) }
-    var longSeekRight by remember { mutableStateOf(false) }
+    var heldDirection by remember { mutableIntStateOf(0) }
+    var seekStarted by remember { mutableStateOf(false) }
+
+    LaunchedEffect(heldDirection) {
+        if (heldDirection != 0) {
+            delay(450)
+            seekStarted = true
+            while (heldDirection != 0) {
+                val target = if (heldDirection > 0) player.currentPosition + 10_000L else player.currentPosition - 10_000L
+                player.seekTo(target.coerceAtLeast(0L).let { if (player.duration > 0) it.coerceAtMost(player.duration) else it })
+                delay(450)
+            }
+        }
+    }
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
     val playFocus = remember { FocusRequester() }
 
@@ -80,50 +92,47 @@ fun PlaybackScreen(
         Modifier.fillMaxSize()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
-                val key = event.nativeKeyEvent
-                if (key.action == AndroidKeyEvent.ACTION_DOWN) {
-                    controlsVisible = true
-                    interaction++
-                    when (key.keyCode) {
-                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (key.repeatCount > 0) {
-                                player.seekTo((player.currentPosition + 10_000L).coerceAtMost(if (player.duration > 0) player.duration else Long.MAX_VALUE))
-                                longSeekRight = true
-                            }
-                            true
+                val right = event.key == Key.DirectionRight
+                val left = event.key == Key.DirectionLeft
+                val center = event.key == Key.DirectionCenter || event.key == Key.Enter
+                val upDown = event.key == Key.DirectionUp || event.key == Key.DirectionDown
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        controlsVisible = true
+                        interaction++
+                        when {
+                            right -> { heldDirection = 1; true }
+                            left -> { heldDirection = -1; true }
+                            center -> true
+                            upDown -> true
+                            else -> false
                         }
-                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (key.repeatCount > 0) {
-                                player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
-                                longSeekLeft = true
-                            }
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> true
-                        AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> true
-                        else -> false
                     }
-                } else if (key.action == AndroidKeyEvent.ACTION_UP) {
-                    when (key.keyCode) {
-                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (!longSeekRight) onNext()
-                            longSeekRight = false
-                            true
+                    KeyEventType.KeyUp -> {
+                        when {
+                            right -> {
+                                heldDirection = 0
+                                if (!seekStarted) onNext()
+                                seekStarted = false
+                                true
+                            }
+                            left -> {
+                                heldDirection = 0
+                                if (!seekStarted) onPrevious()
+                                seekStarted = false
+                                true
+                            }
+                            center -> {
+                                controlsVisible = !controlsVisible
+                                interaction++
+                                true
+                            }
+                            upDown -> true
+                            else -> false
                         }
-                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (!longSeekLeft) onPrevious()
-                            longSeekLeft = false
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> {
-                            controlsVisible = !controlsVisible
-                            interaction++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> true
-                        else -> false
                     }
-                } else false
+                    else -> false
+                }
             }
     ) {
         if (item.kind == MediaKind.VIDEO) {
