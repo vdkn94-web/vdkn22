@@ -51,7 +51,7 @@ class SmbArtworkRepository(context: Context) {
             } catch (error: Exception) {
                 SPlayLog.warn("Metadata", "Could not read tags from $relativePath", error)
                 TrackInfo(relativePath.substringAfterLast('/').substringBeforeLast('.'), "Неизвестный исполнитель", null).also {
-                    synchronized(metadataMemory) { metadataMemory.put(relativePath, it) }
+                    synchronized(metadataMemory) { metadataMemory.put(metadataKey, it) }
                 }
             } finally {
                 runCatching { retriever.release() }
