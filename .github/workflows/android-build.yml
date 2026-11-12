@@ -31,7 +31,9 @@ jobs:
 
       - name: Clean and build debug APK
         working-directory: SPlay
-        run: ./gradlew --no-configuration-cache --no-build-cache clean :app:assembleDebug
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-configuration-cache --no-build-cache clean :app:assembleDebug
 
       - name: Verify APK package version
         working-directory: SPlay
