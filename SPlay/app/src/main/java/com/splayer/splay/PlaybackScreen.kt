@@ -21,8 +21,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.*
@@ -92,12 +91,13 @@ fun PlaybackScreen(
         Modifier.fillMaxSize()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
-                val right = event.key == Key.DirectionRight
-                val left = event.key == Key.DirectionLeft
-                val center = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
-                val upDown = event.key == Key.DirectionUp || event.key == Key.DirectionDown
-                when (event.type) {
-                    KeyEventType.KeyDown -> {
+                val nativeEvent = event.nativeKeyEvent
+                val right = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                val left = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                val center = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER
+                val upDown = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP || nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                when (nativeEvent.action) {
+                    android.view.KeyEvent.ACTION_DOWN -> {
                         controlsVisible = true
                         interaction++
                         when {
@@ -108,7 +108,7 @@ fun PlaybackScreen(
                             else -> false
                         }
                     }
-                    KeyEventType.KeyUp -> {
+                    android.view.KeyEvent.ACTION_UP -> {
                         when {
                             right -> {
                                 heldDirection = 0
