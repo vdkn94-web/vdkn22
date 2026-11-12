@@ -172,6 +172,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
 
     if (activeItem != null && player != null) {
         val currentSettings = remember(activeItem?.path) { currentSmbSettings() }
+        key(activeItem!!.path) {
         PlaybackScreen(
             context = context,
             item = activeItem!!,
@@ -191,6 +192,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
             },
             onStop = { activeItem = null }
         )
+        }
         return
     }
 
