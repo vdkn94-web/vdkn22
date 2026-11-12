@@ -3,6 +3,8 @@ package com.splayer.splay
 import android.content.Context
 import android.view.View
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
@@ -31,7 +33,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import androidx.tv.material3.Button
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
@@ -52,11 +54,12 @@ fun PlaybackScreen(
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
     var position by remember(player) { mutableLongStateOf(0L) }
     var duration by remember(player) { mutableLongStateOf(0L) }
-    var controlsVisible by remember(item.path) { mutableStateOf(true) }
+    var controlsVisible by remember(item.path) { mutableStateOf(false) }
     var controlsFocused by remember { mutableStateOf(false) }
     var interaction by remember { mutableIntStateOf(0) }
     var heldDirection by remember { mutableIntStateOf(0) }
     var seekStarted by remember { mutableStateOf(false) }
+    var videoScaleFilled by remember(item.path) { mutableStateOf(false) }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
     val playFocus = remember { FocusRequester() }
@@ -97,6 +100,7 @@ fun PlaybackScreen(
                 factory = { viewContext ->
                     PlayerView(viewContext).apply {
                         useController = false
+                        resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                         this.player = player
                         keepScreenOn = true
                         isFocusable = true
@@ -146,7 +150,10 @@ fun PlaybackScreen(
                         requestFocus()
                     }
                 },
-                update = { it.player = player },
+                update = {
+                    it.player = player
+                    it.resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -238,38 +245,33 @@ fun PlaybackScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(onClick = onStop, modifier = focusModifier.focusRequester(playFocus)) {
-                        Text("■", color = Color.White, fontSize = 27.sp)
+                    PlayerIconControl("⤨", "Перемешивание", player.shuffleModeEnabled, playFocus, { controlsFocused = it }) {
+                        player.shuffleModeEnabled = !player.shuffleModeEnabled
                     }
-                    Button(onClick = onPrevious, modifier = focusModifier) {
-                        Text("|◀", color = Color.White, fontSize = 25.sp)
+                    PlayerIconControl("|◀", "Предыдущий трек или видео", onFocused = { controlsFocused = it }, onClick = onPrevious)
+                    PlayerIconControl(if (playing) "Ⅱ" else "▶", "Пауза или воспроизведение", onFocused = { controlsFocused = it }) {
+                        if (player.isPlaying) player.pause() else player.play()
                     }
-                    Button(onClick = { player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L)) }, modifier = focusModifier) {
-                        Text("◀◀", color = Color.White, fontSize = 25.sp)
-                    }
-                    Button(onClick = { if (player.isPlaying) player.pause() else player.play() }, modifier = focusModifier) {
-                        Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 28.sp)
-                    }
-                    Button(onClick = { player.seekTo((player.currentPosition + 10_000L).coerceAtMost(if (duration > 0) duration else Long.MAX_VALUE)) }, modifier = focusModifier) {
-                        Text("▶▶", color = Color.White, fontSize = 25.sp)
-                    }
-                    Button(onClick = onNext, modifier = focusModifier) {
-                        Text("▶|", color = Color.White, fontSize = 25.sp)
-                    }
-                    Button(onClick = {
+                    PlayerIconControl("▶|", "Следующий трек или видео", onFocused = { controlsFocused = it }, onClick = onNext)
+                    PlayerIconControl(
+                        if (player.repeatMode == Player.REPEAT_MODE_ONE) "↻¹" else "↻",
+                        "Повтор",
+                        player.repeatMode != Player.REPEAT_MODE_OFF,
+                        onFocused = { controlsFocused = it }
+                    ) {
                         player.repeatMode = when (player.repeatMode) {
                             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                             else -> Player.REPEAT_MODE_OFF
                         }
-                    }, modifier = focusModifier) {
-                        Text(if (player.repeatMode == Player.REPEAT_MODE_OFF) "↻" else "↻¹", color = Color.White, fontSize = 27.sp)
                     }
-                    Button(onClick = { player.shuffleModeEnabled = !player.shuffleModeEnabled }, modifier = focusModifier) {
-                        Text("⤨", color = Color.White, fontSize = 27.sp)
-                    }
-                    Button(onClick = { player.volume = if (player.volume > 0f) 0f else 1f }, modifier = focusModifier) {
-                        Text(if (player.volume > 0f) "◖))" else "◖×", color = Color.White, fontSize = 23.sp)
+                    if (item.kind == MediaKind.VIDEO) {
+                        PlayerIconControl(
+                            if (videoScaleFilled) "⛶" else "□",
+                            "Масштаб: вписать или заполнить",
+                            videoScaleFilled,
+                            onFocused = { controlsFocused = it }
+                        ) { videoScaleFilled = !videoScaleFilled }
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -278,6 +280,36 @@ fun PlaybackScreen(
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun PlayerIconControl(
+    symbol: String,
+    description: String,
+    selected: Boolean = false,
+    focusRequester: FocusRequester? = null,
+    onFocused: (Boolean) -> Unit,
+    onClick: () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    val controlModifier = Modifier
+        .size(64.dp)
+        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+        .onFocusChanged {
+            focused = it.isFocused
+            onFocused(it.isFocused)
+        }
+        .clickable(onClick = onClick)
+        .focusable()
+    Box(modifier = controlModifier, contentAlignment = Alignment.Center) {
+        Text(
+            text = symbol,
+            color = if (selected || focused) Color.White else Color(0xFFE8E8E8),
+            fontSize = 31.sp,
+            maxLines = 1
+        )
     }
 }
 
