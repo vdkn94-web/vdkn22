@@ -33,6 +33,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -87,6 +90,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit) {
+    val context = LocalContext.current
     var selected by remember { mutableStateOf(Section.VIDEO) }
     var settingsTab by remember { mutableStateOf("Подключение") }
     var search by remember { mutableStateOf("") }
@@ -96,10 +100,68 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
     var username by remember { mutableStateOf(SecurePreferences.get("username")) }
     var password by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Укажите SMB-сервер и папку с файлами") }
+    var activeItem by remember { mutableStateOf<MediaItem?>(null) }
+    var queue by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var queueIndex by remember { mutableIntStateOf(0) }
+    var player by remember { mutableStateOf<ExoPlayer?>(null) }
     val videoState by viewModel.video.collectAsState()
     val musicState by viewModel.music.collectAsState()
 
-    BackHandler(enabled = selected != Section.VIDEO) { selected = Section.VIDEO }
+    BackHandler(enabled = activeItem != null || selected != Section.VIDEO) {
+        if (activeItem != null) activeItem = null else selected = Section.VIDEO
+    }
+
+    DisposableEffect(activeItem?.path) {
+        val item = activeItem
+        if (item == null) {
+            player = null
+            onDispose { }
+        } else {
+            val settings = currentSmbSettings()
+            try {
+                val exo = ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(DefaultMediaSourceFactory(SmbDataSourceFactory { settings }))
+                    .build()
+                exo.setMediaItem(androidx.media3.common.MediaItem.fromUri(SmbMediaUri.create(settings, item.path)))
+                exo.prepare()
+                exo.playWhenReady = true
+                player = exo
+                SPlayLog.info("Player", "Opening ${item.path}")
+                onDispose {
+                    exo.release()
+                    if (player === exo) player = null
+                }
+            } catch (error: Throwable) {
+                SPlayLog.error("Player", "Could not create player", error)
+                status = error.message ?: "Не удалось запустить плеер"
+                activeItem = null
+                onDispose { }
+            }
+        }
+    }
+
+    if (activeItem != null && player != null) {
+        val currentSettings = remember(activeItem?.path) { currentSmbSettings() }
+        PlaybackScreen(
+            context = context,
+            item = activeItem!!,
+            player = player!!,
+            settings = currentSettings,
+            onPrevious = {
+                if (queueIndex > 0) {
+                    queueIndex--
+                    activeItem = queue[queueIndex]
+                }
+            },
+            onNext = {
+                if (queueIndex < queue.lastIndex) {
+                    queueIndex++
+                    activeItem = queue[queueIndex]
+                }
+            }
+        )
+        return
+    }
 
     Row(
         Modifier.fillMaxSize().background(Color(0xFF101216)).padding(22.dp),
@@ -140,7 +202,11 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             )
                         }
                         Spacer(Modifier.height(12.dp))
-                        MediaList(videoState.items, "Видео пока не найдены")
+                        MediaList(videoState.items, "Видео пока не найдены") { item ->
+                            queue = videoState.items
+                            queueIndex = videoState.items.indexOf(item)
+                            activeItem = item
+                        }
                     }
                     Section.MUSIC -> {
                         Text("Музыка", fontSize = 30.sp, color = Color.White)
@@ -157,7 +223,11 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             )
                         }
                         Spacer(Modifier.height(12.dp))
-                        MediaList(musicState.items, "Музыкальные треки пока не найдены")
+                        MediaList(musicState.items, "Музыкальные треки пока не найдены") { item ->
+                            queue = musicState.items
+                            queueIndex = musicState.items.indexOf(item)
+                            activeItem = item
+                        }
                     }
                     Section.SEARCH -> {
                         Text("Поиск", fontSize = 30.sp, color = Color.White)
@@ -166,7 +236,11 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                         val found = (videoState.items + musicState.items).filter {
                             it.name.contains(search, ignoreCase = true)
                         }
-                        MediaList(found, "Ничего не найдено")
+                        MediaList(found, "Ничего не найдено") { item ->
+                            queue = found
+                            queueIndex = found.indexOf(item)
+                            activeItem = item
+                        }
                     }
                     Section.SETTINGS -> {
                         Text("Настройки", fontSize = 30.sp, color = Color.White)
@@ -187,19 +261,13 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                                 AppInput(password, { password = it }, "Пароль", secret = true)
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Button(onClick = {
-                                        SecurePreferences.put("server", server)
-                                        SecurePreferences.put("share", share)
-                                        SecurePreferences.put("username", username)
-                                        if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
+                                        saveConnection(server, share, username, password)
                                         password = ""
                                         status = "Параметры подключения сохранены"
                                         SPlayLog.info("Settings", "SMB connection settings saved")
                                     }) { Text("Сохранить подключение") }
                                     Button(onClick = {
-                                        SecurePreferences.put("server", server)
-                                        SecurePreferences.put("share", share)
-                                        SecurePreferences.put("username", username)
-                                        if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
+                                        saveConnection(server, share, username, password)
                                         password = ""
                                         viewModel.testConnection { status = it }
                                     }) { Text("Проверить соединение") }
@@ -228,14 +296,30 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
     }
 }
 
+private fun currentSmbSettings() = SmbSettings(
+    server = SecurePreferences.get("server"),
+    share = SecurePreferences.get("share"),
+    username = SecurePreferences.get("username"),
+    password = SecurePreferences.getSecret("password"),
+    folder = SecurePreferences.get("folder")
+)
+
+private fun saveConnection(server: String, share: String, username: String, password: String) {
+    SecurePreferences.put("server", server)
+    SecurePreferences.put("share", share)
+    SecurePreferences.put("username", username)
+    if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
+}
+
 @Composable
-private fun MediaList(items: List<MediaItem>, emptyMessage: String) {
+private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick: (MediaItem) -> Unit) {
     if (items.isEmpty()) {
         Text(emptyMessage, color = Color(0xFF8F98A6), fontSize = 15.sp)
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             items(items, key = { it.path }) { item ->
                 Surface(
+                    onClick = { onItemClick(item) },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF222832))
