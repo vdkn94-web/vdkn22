@@ -162,7 +162,7 @@ class SmbDataSource(
 
 object SmbMediaUri {
     fun create(settings: SmbSettings, relativePath: String): Uri {
-        val encodedPath = Uri.encode(relativePath.replace('\\\\', '/'), "/")
+        val encodedPath = Uri.encode(relativePath.replace("\\", "/"), "/")
         return Uri.parse("smb://${settings.server}/${Uri.encode(settings.share)}/$encodedPath")
     }
 }
