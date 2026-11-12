@@ -133,7 +133,11 @@ fun PlaybackScreen(
                                 }
                                 if (event.action == android.view.KeyEvent.ACTION_UP) {
                                     heldDirection = 0
-                                    if (!seekStarted) { if (right) onNext() else onPrevious() }
+                                    if (!seekStarted) {
+                                        videoScaleFilled = false
+                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                        if (right) onNext() else onPrevious()
+                                    }
                                     return true
                                 }
                             }
