@@ -117,7 +117,7 @@ private val AppBackground = Color(0xFF0B1018)
 private val PanelColor = Color(0xB8202938)
 private val AccentColor = Color(0xFF9BB7FF)
 
-private object SPlayLog {
+internal object SPlayLog {
     private val lock = Any()
     @Volatile private var logFile: File? = null
     fun init(context: android.content.Context) {
