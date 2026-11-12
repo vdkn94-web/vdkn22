@@ -2,10 +2,12 @@ package com.splayer.splay
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.BackHandler
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -343,20 +345,18 @@ private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick:
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             items(items, key = { it.path }) { item ->
-                Surface(
-                    onClick = { onItemClick(item) },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF222832))
+                Row(
+                    Modifier.fillMaxWidth().height(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF222832))
+                        .clickable { onItemClick(item) }
+                        .focusable()
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(if (item.kind == MediaKind.VIDEO) "▶" else "♫", color = Color(0xFF93B9E2))
-                        Spacer(Modifier.width(12.dp))
-                        Text(item.name, color = Color.White, fontSize = 15.sp)
-                    }
+                    Text(if (item.kind == MediaKind.VIDEO) "▶" else "♫", color = Color(0xFF93B9E2))
+                    Spacer(Modifier.width(12.dp))
+                    Text(item.name, color = Color.White, fontSize = 15.sp)
                 }
             }
         }
@@ -371,23 +371,25 @@ private fun MenuButton(
     focusModifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(54.dp).then(focusModifier).onFocusChanged { focused = it.isFocused },
-        shape = RoundedCornerShape(12.dp),
-        colors = androidx.tv.material3.SurfaceDefaults.colors(
-            containerColor = when {
-                selected -> Color(0xFF294E76)
-                focused -> Color(0xFF303844)
-                else -> Color.Transparent
-            }
-        )
+    Row(
+        Modifier.fillMaxWidth().height(54.dp).then(focusModifier)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                when {
+                    selected -> Color(0xFF294E76)
+                    focused -> Color(0xFF303844)
+                    else -> Color.Transparent
+                }
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .focusable()
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(section.icon, color = Color.White, fontSize = 22.sp)
-            Spacer(Modifier.width(14.dp))
-            Text(section.title, color = Color.White, fontSize = 17.sp)
-        }
+        Text(section.icon, color = Color.White, fontSize = 22.sp)
+        Spacer(Modifier.width(14.dp))
+        Text(section.title, color = Color.White, fontSize = 17.sp)
     }
 }
 

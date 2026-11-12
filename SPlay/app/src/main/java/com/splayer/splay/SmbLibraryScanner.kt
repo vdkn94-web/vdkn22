@@ -1,6 +1,5 @@
 package com.splayer.splay
 
-import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.share.DiskShare
@@ -56,7 +55,7 @@ class SmbLibraryScanner {
                                 val name = entry.fileName
                                 if (name == "." || name == ".." || name.isBlank()) continue
                                 val child = if (current.isBlank()) name else "$current\\$name"
-                                val isDirectory = entry.fileAttributes.contains(FileAttributes.FILE_ATTRIBUTE_DIRECTORY)
+                                val isDirectory = (entry.fileAttributes and 0x10L) != 0L
                                 if (isDirectory) {
                                     if (visited.size + folders.size < MAX_FOLDERS) folders.addLast(child)
                                 } else {
