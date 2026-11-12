@@ -1,0 +1,62 @@
+name: SPlay clean rebuild
+
+on:
+  push:
+    branches: [ rewrite/splay-clean ]
+  workflow_dispatch:
+
+concurrency:
+  group: splay-clean-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37 build-tools;37.0.0'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Build clean debug APK
+        working-directory: SPlay
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-configuration-cache clean :app:assembleDebug
+      - name: Verify APK
+        working-directory: SPlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          echo "$BADGING" | head -n 1
+          echo "$BADGING" | grep -F "package: name='com.splayer.splay' versionCode='3' versionName='2.0'"
+      - name: Prepare artifact
+        working-directory: SPlay
+        run: |
+          mkdir -p verified-artifact
+          cp app/build/outputs/apk/debug/app-debug.apk verified-artifact/SPlay-clean-v2.0-debug.apk
+          {
+            echo "applicationId=com.splayer.splay"
+            echo "versionCode=3"
+            echo "versionName=2.0"
+            echo "commit=${GITHUB_SHA}"
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+          } > verified-artifact/build-info.txt
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPlay-clean-v2.0-${{ github.run_number }}-${{ github.sha }}
+          path: SPlay/verified-artifact/*
+          if-no-files-found: error

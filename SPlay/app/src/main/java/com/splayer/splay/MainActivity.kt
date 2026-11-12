@@ -1,889 +1,182 @@
 package com.splayer.splay
 
-import android.net.Uri
-import android.graphics.BitmapFactory
-import java.io.File
-import java.io.FileOutputStream
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AudioFile
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayCircleFilled
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.hierynomus.msdtyp.AccessMask
-import com.hierynomus.msfscc.FileAttributes
-import com.hierynomus.protocol.commons.EnumWithValue
-import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation
-import com.hierynomus.mssmb2.SMB2CreateDisposition
-import com.hierynomus.mssmb2.SMB2ShareAccess
-import com.hierynomus.smbj.SMBClient
-import com.hierynomus.smbj.auth.AuthenticationContext
-import com.hierynomus.smbj.connection.Connection
-import com.hierynomus.smbj.session.Session
-import com.hierynomus.smbj.share.DiskShare
-import java.util.EnumSet
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.channels.Channel
-import org.videolan.libvlc.LibVLC
-import org.videolan.libvlc.Media
-import org.videolan.libvlc.MediaPlayer
-import org.videolan.libvlc.util.VLCVideoLayout
+import androidx.tv.material3.Button
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
 
-private val AppBackground = Color(0xFF0B1018)
-private val PanelColor = Color(0xB8202938)
-private val AccentColor = Color(0xFF9BB7FF)
-
-internal object SPlayLog {
-    private val lock = Any()
-    @Volatile private var logFile: File? = null
-    fun init(context: android.content.Context) {
-        logFile = File(context.filesDir, "splay-logs.txt")
-        add("SPlay started")
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            add("FATAL on ${thread.name}: ${error.stackTraceToString()}")
-            previous?.uncaughtException(thread, error)
-        }
-    }
-    fun add(message: String) {
-        val line = "${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}  $message"
-        Log.e("SPlay", line)
-        synchronized(lock) {
-            val file = logFile ?: return
-            try {
-                file.appendText(line + "\n")
-                if (file.length() > 1_500_000L) file.writeText(file.readLines().takeLast(5000).joinToString("\n") + "\n")
-            } catch (_: Exception) { }
-        }
-    }
-    fun read(context: android.content.Context): String = synchronized(lock) {
-        runCatching { File(context.filesDir, "splay-logs.txt").takeIf { it.isFile }?.readText() ?: "Лог пока пуст" }.getOrDefault("Не удалось прочитать лог")
-    }
-    fun export(context: android.content.Context): String {
-        val appLog = read(context)
-        val systemLog = try {
-            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "5000"))
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            process.waitFor()
-            output.takeLast(1_500_000)
-        } catch (error: Exception) {
-            "Не удалось получить Android logcat: ${error.message}"
-        }
-        return appLog + "\n\n========== ANDROID LOGCAT (last 5000 lines) ==========\n" + systemLog
-    }
-    fun clear(context: android.content.Context) {
-        synchronized(lock) { runCatching { File(context.filesDir, "splay-logs.txt").writeText("") } }
-        add("Log cleared")
-    }
+private enum class Section(val title: String, val icon: String) {
+    VIDEO("Видео", "▶"),
+    MUSIC("Музыка", "♫"),
+    SEARCH("Поиск", "⌕"),
+    SETTINGS("Настройки", "⚙")
 }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        SPlayLog.init(applicationContext)
-        window.statusBarColor = android.graphics.Color.rgb(11, 16, 24)
-        window.navigationBarColor = android.graphics.Color.rgb(11, 16, 24)
+        AppContextHolder.context = applicationContext
+        SPlayLog.install(applicationContext)
+        SPlayLog.info("App", "SPlay 2.0 started")
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = AccentColor,
-                    secondary = Color(0xFF80A9FF),
-                    background = AppBackground,
-                    surface = PanelColor
-                )
-            ) {
-                SPlayApp()
+            MaterialTheme {
+                SPlayApp(onExportLogs = { createLogExport() })
             }
         }
     }
-}
 
-private data class RemoteEntry(
-    val name: String,
-    val path: String,
-    val directory: Boolean
-)
-
-private class SmbBrowser {
-    private var client: SMBClient? = null
-    private var connection: Connection? = null
-    private var session: Session? = null
-    private var share: DiskShare? = null
-
-    fun connect(host: String, shareName: String, username: String, password: String, domain: String) {
-        disconnect()
-        val newClient = SMBClient()
-        try {
-            val newConnection = newClient.connect(host.trim())
-            val auth = AuthenticationContext(
-                username.trim(),
-                password.toCharArray(),
-                domain.trim()
-            )
-            val newSession = newConnection.authenticate(auth)
-            val newShare = newSession.connectShare(shareName.trim()) as DiskShare
-            client = newClient
-            connection = newConnection
-            session = newSession
-            share = newShare
-        } catch (error: Exception) {
-            try { newClient.close() } catch (_: Exception) { }
-            throw error
+    private fun createLogExport() {
+        val intent = android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_TITLE, "splay-logs.txt")
         }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, 4102)
     }
 
-    private var listingDirectory: com.hierynomus.smbj.share.Directory? = null
-    private var listingIterator: Iterator<FileIdBothDirectoryInformation>? = null
-    private var listingPath: String? = null
-
-    fun listPage(path: String, reset: Boolean, pageSize: Int = 40): Pair<List<RemoteEntry>, Boolean> {
-        val activeShare = share ?: error("Сначала подключись к SMB-папке")
-        if (reset || listingPath != path || listingIterator == null) {
-            closeListing()
-            listingDirectory = activeShare.openDirectory(
-                path,
-                EnumSet.of(AccessMask.FILE_LIST_DIRECTORY, AccessMask.FILE_READ_ATTRIBUTES, AccessMask.FILE_READ_EA),
-                null,
-                EnumSet.allOf(SMB2ShareAccess::class.java),
-                SMB2CreateDisposition.FILE_OPEN,
-                null
-            )
-            listingIterator = listingDirectory!!.iterator()
-            listingPath = path
-        }
-
-        val result = ArrayList<RemoteEntry>(pageSize)
-        val iterator = listingIterator ?: return Pair(emptyList(), false)
-        while (result.size < pageSize && iterator.hasNext()) {
-            val item = iterator.next()
-            val name = item.fileName
-            if (name == "." || name == "..") continue
-            val isDirectory = EnumWithValue.EnumUtils.isSet(
-                item.fileAttributes,
-                FileAttributes.FILE_ATTRIBUTE_DIRECTORY
-            )
-            val childPath = if (path.isBlank()) name else "$path\\$name"
-            result.add(RemoteEntry(name, childPath, isDirectory))
-        }
-        val hasMore = iterator.hasNext()
-        if (!hasMore) closeListing()
-        return Pair(result, hasMore)
-    }
-
-
-    fun scanVideos(rootPath: String, onBatch: (List<RemoteEntry>) -> Unit) {
-        val activeShare = share ?: error("Сначала подключись к SMB-папке")
-        closeListing()
-        val pending = java.util.ArrayDeque<String>()
-        val visited = HashSet<String>()
-        val batch = ArrayList<RemoteEntry>(40)
-        pending.add(rootPath)
-        var scannedDirectories = 0
-        var foundVideos = 0
-        SPlayLog.add("Video scan started: $rootPath")
-        while (pending.isNotEmpty()) {
-            val dirPath = pending.removeFirst()
-            if (!visited.add(dirPath)) continue
-            scannedDirectories++
-            if (scannedDirectories > 20000) error("Слишком много папок: остановлено после 20000")
-            val directory = activeShare.openDirectory(
-                dirPath,
-                EnumSet.of(AccessMask.FILE_LIST_DIRECTORY, AccessMask.FILE_READ_ATTRIBUTES, AccessMask.FILE_READ_EA),
-                null,
-                EnumSet.allOf(SMB2ShareAccess::class.java),
-                SMB2CreateDisposition.FILE_OPEN,
-                null
-            )
-            try {
-                val iterator = directory.iterator()
-                while (iterator.hasNext()) {
-                    val item = iterator.next()
-                    val name = item.fileName
-                    if (name == "." || name == "..") continue
-                    val isDirectory = EnumWithValue.EnumUtils.isSet(item.fileAttributes, FileAttributes.FILE_ATTRIBUTE_DIRECTORY)
-                    val childPath = if (dirPath.isBlank()) name else "$dirPath\\$name"
-                    if (isDirectory) pending.addLast(childPath)
-                    else if (isVideo(name)) {
-                        batch.add(RemoteEntry(name, childPath, false))
-                        foundVideos++
-                        if (batch.size >= 40) {
-                            onBatch(batch.toList())
-                            batch.clear()
-                            SPlayLog.add("Video scan progress: $foundVideos files, $scannedDirectories folders")
-                        }
-                    }
-                    if (foundVideos > 100000) error("Слишком много видео: остановлено после 100000 файлов")
+    @Deprecated("Deprecated in Android")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 4102 && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            runCatching {
+                contentResolver.openOutputStream(uri)?.use { output ->
+                    SPlayLog.file(applicationContext).inputStream().use { input -> input.copyTo(output) }
                 }
-            } finally {
-                try { directory.close() } catch (_: Exception) { }
-            }
+                SPlayLog.info("Logs", "Diagnostic log exported")
+            }.onFailure { SPlayLog.error("Logs", "Log export failed", it) }
         }
-        if (batch.isNotEmpty()) onBatch(batch.toList())
-        SPlayLog.add("Video scan completed: $foundVideos videos in $scannedDirectories folders")
-    }
-
-    private fun closeListing() {
-        try { listingDirectory?.close() } catch (_: Exception) { }
-        listingDirectory = null
-        listingIterator = null
-        listingPath = null
-    }
-
-    fun copyToPipe(path: String, pipePath: String) {
-        val activeShare = share ?: error("Нет SMB-подключения")
-        val remote = activeShare.openFile(
-            path,
-            EnumSet.of(AccessMask.FILE_READ_DATA, AccessMask.FILE_READ_ATTRIBUTES),
-            null,
-            EnumSet.allOf(SMB2ShareAccess::class.java),
-            SMB2CreateDisposition.FILE_OPEN,
-            null
-        )
-        remote.use { file ->
-            file.inputStream.use { input ->
-                FileOutputStream(pipePath).use { output -> input.copyTo(output, 256 * 1024) }
-            }
-        }
-    }
-
-    fun disconnect() {
-        closeListing()
-        try { share?.close() } catch (_: Exception) { }
-        try { session?.close() } catch (_: Exception) { }
-        try { connection?.close() } catch (_: Exception) { }
-        try { client?.close() } catch (_: Exception) { }
-        share = null
-        session = null
-        connection = null
-        client = null
     }
 }
 
 @Composable
-private fun SPlayApp() {
-    val context = LocalContext.current
-    val browser = remember { SmbBrowser() }
-    val scope = rememberCoroutineScope()
+private fun SPlayApp(onExportLogs: () -> Unit) {
+    var selected by remember { mutableStateOf(Section.VIDEO) }
+    var settingsTab by remember { mutableStateOf("Подключение") }
+    var search by remember { mutableStateOf("") }
+    var server by remember { mutableStateOf(SecurePreferences.get("server")) }
+    var share by remember { mutableStateOf(SecurePreferences.get("share")) }
+    var folder by remember { mutableStateOf(SecurePreferences.get("folder")) }
+    var username by remember { mutableStateOf(SecurePreferences.get("username")) }
+    var password by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("Укажите SMB-сервер и папку с файлами") }
 
-    val preferences = remember { context.getSharedPreferences("splay_settings", android.content.Context.MODE_PRIVATE) }
-    var host by rememberSaveable { mutableStateOf(preferences.getString("host", "") ?: "") }
-    var shareName by rememberSaveable { mutableStateOf(preferences.getString("share", "") ?: "") }
-    var videoFolder by rememberSaveable { mutableStateOf(preferences.getString("video_folder", "") ?: "") }
-    var musicFolder by rememberSaveable { mutableStateOf(preferences.getString("music_folder", "") ?: "") }
-    var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
-    var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
-    var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
-    var mediaSection by rememberSaveable { mutableStateOf("Видео") }
-    var sidebarExpanded by rememberSaveable { mutableStateOf(false) }
-    var showSettings by rememberSaveable { mutableStateOf(false) }
-    var settingsTab by rememberSaveable { mutableStateOf("Подключение") }
-    var scanningVideos by remember { mutableStateOf(false) }
-    var scannedVideoCount by remember { mutableStateOf(0) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var currentPath by rememberSaveable { mutableStateOf("") }
-    var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
-    var hasMoreEntries by remember { mutableStateOf(false) }
-    var connected by remember { mutableStateOf(false) }
-    var autoConnecting by remember { mutableStateOf(host.isNotBlank() && shareName.isNotBlank()) }
-    var busy by remember { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf<String?>(null) }
-    var nowPlaying by remember { mutableStateOf<RemoteEntry?>(null) }
-    var videoMode by remember { mutableStateOf(false) }
-    var playbackPlaying by remember { mutableStateOf(false) }
-    var playbackPosition by remember { mutableStateOf(0L) }
-    var playbackDuration by remember { mutableStateOf(0L) }
-    var controlsVisible by remember { mutableStateOf(true) }
-    var shuffleEnabled by rememberSaveable { mutableStateOf(false) }
-    var playQueue by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
-    var queueIndex by remember { mutableStateOf(-1) }
-    var showSearch by rememberSaveable { mutableStateOf(false) }
-    var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
-    val playerFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    val playButtonFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
-    val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
-    val saveLogsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        if (uri != null) scope.launch(Dispatchers.IO) {
-            runCatching { context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(SPlayLog.export(context)) } }
-                .onFailure { SPlayLog.add("Log export failed: ${it.message}") }
-        }
-    }
+    BackHandler(enabled = selected != Section.VIDEO) { selected = Section.VIDEO }
 
-    fun requestMediaArt(entry: RemoteEntry, audio: Boolean): Boolean {
-        if (mediaArts.containsKey(entry.path)) return true
-        return artCache.request(entry.path, audio) { result -> scope.launch { mediaArts = mediaArts + (entry.path to result) } }
-    }
-
-    val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800", "--verbose=2")) }
-    val mediaPlayer = remember { MediaPlayer(libVlc) }
-
-    DisposableEffect(mediaPlayer) {
-        mediaPlayer.setEventListener { event ->
-            when (event.type) {
-                MediaPlayer.Event.Opening -> SPlayLog.add("VLC event: opening")
-                MediaPlayer.Event.Buffering -> SPlayLog.add("VLC event: buffering ${event.buffering}%")
-                MediaPlayer.Event.Playing -> SPlayLog.add("VLC event: playing")
-                MediaPlayer.Event.Paused -> SPlayLog.add("VLC event: paused")
-                MediaPlayer.Event.Stopped -> SPlayLog.add("VLC event: stopped")
-                MediaPlayer.Event.EndReached -> SPlayLog.add("VLC event: end reached")
-                MediaPlayer.Event.EncounteredError -> SPlayLog.add("VLC ERROR: encountered error")
-                MediaPlayer.Event.Vout -> SPlayLog.add("VLC event: video output count ${event.voutCount}")
+    Row(
+        Modifier.fillMaxSize().background(Color(0xFF101216)).padding(22.dp),
+        horizontalArrangement = Arrangement.spacedBy(22.dp)
+    ) {
+        Column(
+            Modifier.width(220.dp).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("SPLAY", fontSize = 25.sp, color = Color.White)
+            Spacer(Modifier.height(12.dp))
+            Section.entries.forEach { section ->
+                MenuButton(section, selected == section) { selected = section }
             }
+            Spacer(Modifier.weight(1f))
+            Text("SPlay 2.0", color = Color(0xFF777E8B), fontSize = 12.sp)
         }
-        onDispose { mediaPlayer.setEventListener(null) }
-    }
 
-    fun refresh(path: String) {
-        busy = true
-        errorText = null
-        scope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) { browser.listPage(path, true) }
-                entries = result.first
-                hasMoreEntries = result.second
-                currentPath = path
-                preferences.edit().putString("last_path", path).apply()
-            } catch (e: Exception) {
-                SPlayLog.add("Folder listing failed at '$path': ${e.stackTraceToString()}")
-                errorText = e.message ?: "Не удалось прочитать папку"
-            } finally {
-                busy = false
-            }
-        }
-    }
-
-    fun loadMore() {
-        if (busy || !hasMoreEntries) return
-        busy = true
-        scope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) { browser.listPage(currentPath, false) }
-                entries = entries + result.first
-                hasMoreEntries = result.second
-            } catch (e: Exception) {
-                SPlayLog.add("Load-more failed: ${e.stackTraceToString()}")
-                errorText = e.message ?: "Не удалось загрузить следующие файлы"
-            } finally {
-                busy = false
-            }
-        }
-    }
-
-
-    fun scanVideoLibrary(path: String) {
-        if (busy) return
-        busy = true
-        scanningVideos = true
-        scannedVideoCount = 0
-        entries = emptyList()
-        hasMoreEntries = false
-        errorText = null
-        currentPath = path
-        val batches = Channel<List<RemoteEntry>>(Channel.UNLIMITED)
-        val worker = scope.launch(Dispatchers.IO) {
-            try {
-                browser.scanVideos(path) { batch -> batches.trySend(batch) }
-                batches.close()
-            } catch (e: Exception) {
-                SPlayLog.add("Video scan failed: ${e.stackTraceToString()}")
-                batches.close(e)
-            }
-        }
-        scope.launch {
-            try {
-                for (batch in batches) {
-                    entries = entries + batch
-                    scannedVideoCount += batch.size
-                }
-                entries = entries.sortedBy { it.name.lowercase() }
-                preferences.edit().putString("last_path", path).apply()
-            } catch (e: Exception) {
-                errorText = e.message ?: "Не удалось просканировать видеопапку"
-            } finally {
-                worker.join()
-                scanningVideos = false
-                busy = false
-            }
-        }
-    }
-
-    fun connect() {
-        if (host.isBlank() || shareName.isBlank()) {
-            errorText = "Укажи адрес сервера и имя общей папки (share)"
-            return
-        }
-        busy = true
-        errorText = null
-        scope.launch {
-            var startVideoScan = false
-            try {
-                val initialPath = videoFolder.trim()
-                preferences.edit().remove("start_folder").putString("host", host.trim()).putString("share", shareName.trim()).putString("last_path", initialPath).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
-                withContext(Dispatchers.IO) {
-                    browser.connect(host, shareName, username, password, domain)
-                }
-                entries = emptyList()
-                hasMoreEntries = false
-                currentPath = initialPath
-                mediaSection = "Видео"
-                showSettings = false
-                showSearch = false
-                connected = true
-                startVideoScan = true
-                SPlayLog.add("SMB connected; opening Video library at '$initialPath'")
-            } catch (e: Exception) {
-                SPlayLog.add("SMB connect failed: ${e.stackTraceToString()}")
-                connected = false
-                errorText = e.message ?: "Не удалось подключиться к SMB"
-            } finally {
-                busy = false
-                autoConnecting = false
-                if (startVideoScan) scanVideoLibrary(videoFolder.trim())
-            }
-        }
-    }
-
-    fun play(entry: RemoteEntry) {
-        val relative = entry.path.replace("\\", "/")
-        val encodedShare = Uri.encode(shareName.trim(), "/")
-        val encodedPath = Uri.encode(relative, "/")
-        val streamUrl = "smb://${host.trim()}/$encodedShare/$encodedPath"
-        try {
-            SPlayLog.add("Playback requested: ${entry.path}; url host=${host.trim()}; video=${isVideo(entry.name)}")
-            try { mediaPlayer.stop() } catch (_: Exception) { }
-            val media = Media(libVlc, Uri.parse(streamUrl))
-            media.addOption(":network-caching=1800")
-            if (username.isNotBlank()) media.addOption(":smb-user=$username")
-            if (password.isNotBlank()) media.addOption(":smb-pwd=$password")
-            if (domain.isNotBlank()) media.addOption(":smb-domain=$domain")
-            mediaPlayer.media = media
-            media.release()
-            val candidates = entries.filter { !it.directory && (isVideo(it.name) || isAudio(it.name)) }.sortedBy { it.name.lowercase() }
-            playQueue = if (shuffleEnabled) candidates.shuffled() else candidates
-            queueIndex = playQueue.indexOfFirst { it.path == entry.path }
-            if (queueIndex < 0) { playQueue = listOf(entry); queueIndex = 0 }
-            nowPlaying = entry
-            controlsVisible = true
-            videoMode = isVideo(entry.name)
-            if (videoMode) {
-                SPlayLog.add("VLC video queued; waiting for video surface before play")
-                playbackPlaying = false
-            } else {
-                SPlayLog.add("VLC audio play invoked")
-                mediaPlayer.play()
-                playbackPlaying = true
-            }
-        } catch (e: Exception) {
-            SPlayLog.add("VLC playback failed for '${entry.path}': ${e.stackTraceToString()}")
-            errorText = "VLC не смог открыть файл: ${e.message ?: "ошибка воспроизведения"}"
-        }
-    }
-
-    LaunchedEffect(nowPlaying) {
-        while (nowPlaying != null) {
-            playbackPosition = mediaPlayer.time.coerceAtLeast(0L)
-            playbackDuration = mediaPlayer.length.coerceAtLeast(0L)
-            playbackPlaying = mediaPlayer.isPlaying
-            delay(500)
-        }
-    }
-
-    LaunchedEffect(controlsVisible, nowPlaying) {
-        if (controlsVisible && nowPlaying != null) {
-            delay(5000)
-            controlsVisible = false
-        }
-    }
-
-    fun playQueueStep(delta: Int) {
-        if (playQueue.isEmpty()) return
-        val next = (queueIndex + delta).coerceIn(0, playQueue.lastIndex)
-        if (next != queueIndex) {
-            val activeQueue = playQueue
-            val selected = activeQueue[next]
-            queueIndex = next
-            play(selected)
-            playQueue = activeQueue
-            queueIndex = next
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        mediaSection = "Видео"
-        if (host.isNotBlank() && shareName.isNotBlank()) { autoConnecting = true; connect() }
-    }
-
-    LaunchedEffect(nowPlaying) {
-        if (nowPlaying != null) {
-            controlsVisible = true
-            delay(200)
-            runCatching { playerFocusRequester.requestFocus() }
-        }
-    }
-
-    LaunchedEffect(controlsVisible, nowPlaying) {
-        if (nowPlaying == null) return@LaunchedEffect
-        delay(100)
-        runCatching {
-            if (controlsVisible) playButtonFocusRequester.requestFocus()
-            else playerFocusRequester.requestFocus()
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            try { mediaPlayer.stop() } catch (_: Exception) { }
-            try { mediaPlayer.detachViews() } catch (_: Exception) { }
-            mediaPlayer.release()
-            libVlc.release()
-            scope.launch(Dispatchers.IO) { browser.disconnect() }
-        }
-    }
-
-    BackHandler(enabled = nowPlaying != null || sidebarExpanded || showSettings || (connected && currentPath.isNotBlank())) {
-        if (nowPlaying != null) {
-            mediaPlayer.stop()
-            try { mediaPlayer.detachViews() } catch (_: Exception) { }
-            nowPlaying = null
-            videoMode = false
-            playbackPlaying = false
-        } else if (sidebarExpanded) {
-            sidebarExpanded = false
-        } else if (showSettings) {
-            showSettings = false
-        } else {
-            val parent = currentPath.substringBeforeLast('\\', "")
-            refresh(parent)
-        }
-    }
-
-    val activeArt = mediaArts[nowPlaying?.path]
-    val activeArtBitmap = rememberArtworkBitmap(activeArt?.image)
-
-    Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
-        if (nowPlaying != null) {
-            Column(Modifier.fillMaxSize().background(Color.Black).focusRequester(playerFocusRequester).focusable().onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown || controlsVisible) false else {
-                    when (event.key) {
-                        Key.DirectionCenter, Key.Enter, Key.DirectionUp, Key.DirectionDown -> {
-                            controlsVisible = true
-                            true
-                        }
-                        Key.DirectionLeft -> { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L); true }
-                        Key.DirectionRight -> { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)); true }
-                        else -> false
-                    }
-                }
-            }) {
-                if (controlsVisible) Row(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("SPlay", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                    Spacer(Modifier.width(16.dp))
-                    Text(activeArt?.title ?: nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
-                }
-                if (videoMode) {
-                    AndroidView(factory = { viewContext ->
-                        VLCVideoLayout(viewContext).also { layout ->
-                            layout.isFocusable = false
-                            layout.isFocusableInTouchMode = false
-                            layout.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                            videoLayout = layout
-                            mediaPlayer.attachViews(layout, null, false, false)
-                            SPlayLog.add("VLC video surface attached for ${nowPlaying?.path}")
-                            mediaPlayer.play()
-                        }
-                    }, modifier = Modifier.fillMaxWidth().weight(1f))
-                } else {
-                    Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF101010)), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            if (activeArtBitmap != null) {
-                                Image(activeArtBitmap, contentDescription = "Обложка альбома", modifier = Modifier.width(240.dp).height(240.dp), contentScale = ContentScale.Crop)
-                            } else {
-                                Text("♫", fontSize = 88.sp, color = AccentColor)
-                            }
-                            Spacer(Modifier.height(18.dp))
-                            Text(activeArt?.title ?: nowPlaying!!.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                            Text(activeArt?.artist ?: "Воспроизведение аудио", color = Color.LightGray, fontSize = 14.sp, maxLines = 1)
-                        }
-                    }
-                }
-                if (controlsVisible) Column(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 28.dp, vertical = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(formatPlaybackTime(playbackPosition), color = Color.White, fontSize = 12.sp)
-                        Slider(value = if (playbackDuration > 0) playbackPosition.toFloat().coerceIn(0f, playbackDuration.toFloat()) else 0f,
-                            onValueChange = { playbackPosition = it.toLong(); mediaPlayer.time = it.toLong() },
-                            valueRange = 0f..playbackDuration.coerceAtLeast(1L).toFloat(),
-                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
-                        Text(formatPlaybackTime(playbackDuration), color = Color.White, fontSize = 12.sp)
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L) }) { Icon(Icons.Filled.FastRewind, null); Text("10") }
-                        TextButton(onClick = {
-                            shuffleEnabled = !shuffleEnabled
-                            val current = nowPlaying
-                            val rest = playQueue.filter { it.path != current?.path }
-                            playQueue = if (shuffleEnabled) listOfNotNull(current) + rest.shuffled() else (listOfNotNull(current) + rest.sortedBy { it.name.lowercase() })
-                            queueIndex = if (current == null) -1 else 0
-                        }) { Icon(Icons.Filled.Shuffle, "Перемешать", tint = if (shuffleEnabled) AccentColor else Color.LightGray) }
-                        TextButton(onClick = { playQueueStep(-1) }, enabled = queueIndex > 0) { Icon(Icons.Filled.SkipPrevious, "Предыдущий") }
-                        Button(onClick = { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play() }, modifier = Modifier.focusRequester(playButtonFocusRequester)) { Text(if (playbackPlaying) "Ⅱ  Пауза" else "▶  Играть") }
-                        TextButton(onClick = { playQueueStep(1) }, enabled = queueIndex < playQueue.lastIndex) { Icon(Icons.Filled.SkipNext, "Следующий") }
-                        TextButton(onClick = { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)) }) { Text("10"); Icon(Icons.Filled.FastForward, null) }
-                        TextButton(onClick = { controlsVisible = false }) { Text("Скрыть") }
-                    }
-                }
-            }
-        } else {
-            Row(Modifier.fillMaxSize()) {
-                if (connected) {
-                    Column(
-                        Modifier
-                            .width(if (sidebarExpanded) 232.dp else 72.dp)
-                            .fillMaxSize()
-                            .background(Color(0xAA151D29))
-                            .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
-                                    sidebarExpanded = false
-                                    true
-                                } else false
-                            }
-                            .padding(horizontal = if (sidebarExpanded) 14.dp else 8.dp, vertical = 22.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp, bottom = 28.dp)) {
-                            Text("S", color = AccentColor, fontSize = 30.sp, fontWeight = FontWeight.Black)
-                            if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        }
-                        if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) {
-                            mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; searchQuery = ""
-                            scope.launch { while (busy) delay(100); scanVideoLibrary(videoFolder.trim()) }
-                        }
-                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) {
-                            mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; searchQuery = ""
-                            scope.launch { while (busy) delay(100); refresh(musicFolder.trim()) }
-                        }
-                        SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
-                        Spacer(Modifier.weight(1f))
-                        SidebarItem(Icons.Filled.Settings, "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
-                    }
-                }
-                Column(
-                    Modifier.weight(1f).fillMaxSize().padding(horizontal = 30.dp, vertical = 22.dp)
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && connected && !sidebarExpanded) {
-                                sidebarExpanded = true
-                                true
-                            } else false
-                        }
-                ) {
-                if (!connected && autoConnecting) {
-                    Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Text("SPLAY", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
-                        Spacer(Modifier.height(18.dp)); CircularProgressIndicator(color = AccentColor); Spacer(Modifier.height(12.dp))
-                        Text("Подключаемся к медиатеке…", color = Color.LightGray, fontSize = 15.sp)
-                    }
-                } else if (!connected) {
-                    Text("SPlay", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(18.dp))
-                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
-                        Text("Подключение к SMB", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Укажи сетевой ресурс, чтобы открыть свою медиатеку", color = Color.LightGray, fontSize = 14.sp)
-                        Spacer(Modifier.height(18.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                            OutlinedTextField(host, { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.weight(1f))
-                            OutlinedTextField(shareName, { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                            OutlinedTextField(username, { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.weight(1f))
-                            OutlinedTextField(password, { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.weight(1f))
-                            OutlinedTextField(domain, { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.weight(1f))
-                        }
-                        Spacer(Modifier.height(18.dp))
-                        Button(onClick = { connect() }, enabled = !busy) { Text(if (busy) "Подключаемся…" else "Подключиться к серверу") }
-                        Spacer(Modifier.height(8.dp))
-                        Text("Поддерживаются SMB2 и SMB3", color = Color.Gray, fontSize = 12.sp)
-                    }
-                } else if (showSettings) {
-                    Column(Modifier.fillMaxWidth().weight(1f)) {
-                        Text("Настройки", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Surface(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            shape = RoundedCornerShape(22.dp),
+            colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF191D24))
+        ) {
+            Column(Modifier.fillMaxSize().padding(28.dp)) {
+                when (selected) {
+                    Section.VIDEO -> {
+                        Text("Видео", fontSize = 30.sp, color = Color.White)
                         Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            listOf("Подключение", "Папки", "Логи").forEach { tab ->
-                                if (settingsTab == tab) Button(onClick = { settingsTab = tab }) { Text(tab) }
-                                else TextButton(onClick = { settingsTab = tab }) { Text(tab, color = AccentColor) }
+                        Text("Список видеоклипов появится после настройки SMB", color = Color(0xFFADB5C2))
+                        Spacer(Modifier.height(12.dp))
+                        Text(status, color = Color(0xFF8F98A6), fontSize = 14.sp)
+                    }
+                    Section.MUSIC -> {
+                        Text("Музыка", fontSize = 30.sp, color = Color.White)
+                        Spacer(Modifier.height(14.dp))
+                        Text("Список музыкальных треков появится после настройки SMB", color = Color(0xFFADB5C2))
+                    }
+                    Section.SEARCH -> {
+                        Text("Поиск", fontSize = 30.sp, color = Color.White)
+                        Spacer(Modifier.height(18.dp))
+                        AppInput(search, { search = it }, "Название файла")
+                    }
+                    Section.SETTINGS -> {
+                        Text("Настройки", fontSize = 30.sp, color = Color.White)
+                        Spacer(Modifier.height(18.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            listOf("Подключение", "Папка к файлам", "Логи").forEach { tab ->
+                                Button(onClick = { settingsTab = tab }) {
+                                    Text(if (settingsTab == tab) "• $tab" else tab)
+                                }
                             }
                         }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(18.dp))
                         when (settingsTab) {
-                            "Подключение" -> Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
-                                Text("СЕТЕВОЙ РЕСУРС SMB", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text("Сервер / IP") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = shareName, onValueChange = { shareName = it }, label = { Text("Общая папка (share)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Пользователь") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Пароль") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = domain, onValueChange = { domain = it }, label = { Text("Домен") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                Spacer(Modifier.height(12.dp))
+                            "Подключение" -> {
+                                AppInput(server, { server = it }, "Сервер (например, 192.168.1.10)")
+                                AppInput(share, { share = it }, "Общая папка SMB")
+                                AppInput(username, { username = it }, "Логин")
+                                AppInput(password, { password = it }, "Пароль", secret = true)
                                 Button(onClick = {
-                                    preferences.edit().putString("host", host.trim()).putString("share", shareName.trim()).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
-                                    SPlayLog.add("SMB connection settings saved")
-                                    errorText = "Параметры подключения сохранены"
+                                    SecurePreferences.put("server", server)
+                                    SecurePreferences.put("share", share)
+                                    SecurePreferences.put("username", username)
+                                    if (password.isNotEmpty()) SecurePreferences.putSecret("password", password)
+                                    password = ""
+                                    status = "Параметры подключения сохранены"
+                                    SPlayLog.info("Settings", "SMB connection settings saved")
                                 }) { Text("Сохранить подключение") }
                             }
-                            "Папки" -> Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
-                                Text("ПУТИ ВНУТРИ ОБЩЕЙ ПАПКИ", color = AccentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                OutlinedTextField(value = videoFolder, onValueChange = { videoFolder = it }, label = { Text("Папка видео (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = musicFolder, onValueChange = { musicFolder = it }, label = { Text("Папка музыки (от корня SMB)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                Text("Видеотека сканируется в фоне рекурсивно. Превью создаётся только у выбранного элемента, чтобы не перегружать ТВ.", color = Color.Gray, fontSize = 12.sp)
-                                Spacer(Modifier.height(12.dp))
+                            "Папка к файлам" -> {
+                                AppInput(folder, { folder = it }, "Путь внутри общей папки")
                                 Button(onClick = {
-                                    preferences.edit().putString("video_folder", videoFolder.trim()).putString("music_folder", musicFolder.trim()).apply()
-                                    SPlayLog.add("Media folders saved: video='$videoFolder', music='$musicFolder'")
-                                    errorText = "Папки сохранены"
-                                }) { Text("Сохранить папки") }
+                                    SecurePreferences.put("folder", folder)
+                                    status = "Папка сканирования сохранена"
+                                    SPlayLog.info("Settings", "Scan folder saved")
+                                }) { Text("Сохранить папку") }
                             }
-                            else -> Column(Modifier.fillMaxWidth().weight(1f)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Button(onClick = { saveLogsLauncher.launch("SPlay-logs.txt") }) { Text("Сохранить TXT") }
-                                    TextButton(onClick = { SPlayLog.clear(context) }) { Text("Очистить") }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text(SPlayLog.read(context).takeLast(12000), color = Color(0xFFB8C2D2), fontSize = 10.sp, lineHeight = 13.sp, modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()))
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(onClick = { showSettings = false }) { Text("Готово", color = AccentColor) }
-                    }
-                } else {
-                    if (currentPath.isNotBlank()) {
-                        Text(currentPath.substringAfterLast('\\'), color = Color.LightGray, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
-                    }
-                    if (showSearch) {
-                        OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Поиск среди загруженных файлов…") }, leadingIcon = { Icon(Icons.Filled.Search, null, tint = AccentColor) })
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    val visibleEntries = entries.filter { entry ->
-                        (entry.directory || when (mediaSection) {
-                            "Видео" -> isVideo(entry.name)
-                            "Музыка" -> isAudio(entry.name)
-                            else -> true
-                        }) && entry.name.contains(searchQuery, ignoreCase = true)
-                    }.sortedWith(compareByDescending<RemoteEntry> { it.directory }.thenBy { it.name.lowercase() })
-                    if (scanningVideos) {
-                        Text("Сканирование медиатеки… найдено $scannedVideoCount видео", color = AccentColor, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
-                    }
-                    if (busy && entries.isEmpty()) {
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentColor) }
-                    } else if (visibleEntries.isEmpty()) {
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (searchQuery.isNotBlank()) "Ничего не найдено" else "В этой папке пока нет файлов", color = Color.Gray, fontSize = 16.sp) }
-                    } else if (mediaSection == "Видео" && !showSearch) {
-                        LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 210.dp), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            gridItems(visibleEntries, key = { it.path }) { entry ->
-                                VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) }, modifier = Modifier,
-                                    onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
-                            }
-                        }
-                    } else {
-                        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            items(visibleEntries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) else true }, modifier = Modifier,
-                                    onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
-                            }
-                            if (hasMoreEntries) item {
-                                Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                                    Button(onClick = { loadMore() }, enabled = !busy) { Text(if (busy) "Загружаем…" else "Загрузить ещё") }
-                                }
+                            "Логи" -> {
+                                Text("Журнал ошибок и событий приложения", color = Color(0xFFADB5C2))
+                                Spacer(Modifier.height(12.dp))
+                                Button(onClick = onExportLogs) { Text("Сохранить логи в TXT") }
                             }
                         }
                     }
-                }
-                if (errorText != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(errorText!!, color = Color(0xFFFF8D8D), fontSize = 13.sp, maxLines = 2)
-                }
                 }
             }
         }
@@ -891,126 +184,47 @@ private fun SPlayApp() {
 }
 
 @Composable
-private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, expanded: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun MenuButton(section: Section, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     Surface(
-        color = if (selected) Color(0x553F5F91) else Color.Transparent,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(54.dp).onFocusChanged { focused = it.isFocused },
         shape = RoundedCornerShape(12.dp),
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp)
-            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter)) { onClick(); true } else false }
-            .clickable(onClick = onClick).focusable()
+        colors = androidx.tv.material3.SurfaceDefaults.colors(
+            containerColor = when {
+                selected -> Color(0xFF294E76)
+                focused -> Color(0xFF303844)
+                else -> Color.Transparent
+            }
+        )
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 0.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
-        ) {
-            Icon(icon, contentDescription = title, tint = if (selected) AccentColor else Color(0xFFB8C2D2), modifier = Modifier.width(23.dp).height(23.dp))
-            if (expanded) {
-                Spacer(Modifier.width(16.dp))
-                Text(title, color = if (selected) Color.White else Color(0xFFB8C2D2), fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
-            }
+        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(section.icon, color = Color.White, fontSize = 22.sp)
+            Spacer(Modifier.width(14.dp))
+            Text(section.title, color = Color.White, fontSize = 17.sp)
         }
     }
 }
 
 @Composable
-private fun rememberArtworkBitmap(file: File?): androidx.compose.ui.graphics.ImageBitmap? {
-    var bitmap by remember(file?.absolutePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    LaunchedEffect(file?.absolutePath) {
-        bitmap = withContext(Dispatchers.IO) {
-            if (file == null || !file.isFile) null else {
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(file.absolutePath, bounds)
-                val sample = maxOf(1, maxOf(bounds.outWidth / 640, bounds.outHeight / 640))
-                val options = BitmapFactory.Options().apply { inSampleSize = sample }
-                BitmapFactory.decodeFile(file.absolutePath, options)?.asImageBitmap()
-            }
-        }
+private fun AppInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    secret: Boolean = false
+) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Text(label, color = Color(0xFFADB5C2), fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else KeyboardType.Text),
+            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF252B34)).padding(14.dp)
+        )
     }
-    return bitmap
-}
-
-@Composable
-private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    LaunchedEffect(entry.path) { if (!entry.directory && isAudio(entry.name)) while (!requestArt()) delay(350) }
-    val artBitmap = rememberArtworkBitmap(art?.image)
-    Card(
-        modifier = modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
-        colors = CardDefaults.cardColors(containerColor = PanelColor),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.width(42.dp).height(42.dp).background(Color(0xFF303030), RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (artBitmap != null) {
-                    Image(artBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else {
-                    Icon(
-                        imageVector = when {
-                            entry.directory -> Icons.Filled.Folder
-                            isAudio(entry.name) -> Icons.Filled.AudioFile
-                            else -> Icons.Filled.PlayCircleFilled
-                        },
-                        contentDescription = null,
-                        tint = AccentColor,
-                        modifier = Modifier.width(23.dp).height(23.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                Text(art?.title?.takeIf { isAudio(entry.name) } ?: entry.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(
-                    when {
-                        entry.directory -> "ПАПКА"
-                        isAudio(entry.name) -> listOfNotNull(art?.artist, art?.album).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "АУДИО" }
-                        else -> entry.name.substringAfterLast('.', "МЕДИА").uppercase()
-                    },
-                    color = Color.Gray,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    maxLines = 1
-                )
-            }
-            Text(if (entry.directory) "ОТКРЫТЬ  ›" else "ВОСПРОИЗВЕСТИ  ›", color = AccentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    LaunchedEffect(entry.path) { if (!entry.directory) while (!requestArt()) delay(350) }
-    val artBitmap = rememberArtworkBitmap(art?.image)
-    Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick).onFocusChanged { if (it.isFocused && !entry.directory) requestArt() }.focusable(),
-        colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
-        Column(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color(0xFF252830)), contentAlignment = Alignment.Center) {
-                if (artBitmap != null) Image(artBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                else Icon(if (entry.directory) Icons.Filled.Folder else Icons.Filled.PlayCircleFilled, null, tint = AccentColor, modifier = Modifier.width(36.dp).height(36.dp))
-            }
-            Text(entry.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
-        }
-    }
-}
-
-private fun formatPlaybackTime(ms: Long): String {
-    val total = (ms / 1000L).coerceAtLeast(0L)
-    val hours = total / 3600L
-    val minutes = (total % 3600L) / 60L
-    val seconds = total % 60L
-    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
-}
-
-private fun isAudio(name: String): Boolean {
-    return name.substringAfterLast('.', "").lowercase() in setOf("mp3", "flac", "wav", "aac", "m4a", "ogg", "opus", "wma", "ape")
-}
-
-private fun isVideo(name: String): Boolean {
-    return name.substringAfterLast('.', "").lowercase() in setOf("mp4", "mkv", "avi", "mov", "wmv", "m4v", "webm", "ts", "m2ts", "mpeg", "mpg", "flv")
 }
