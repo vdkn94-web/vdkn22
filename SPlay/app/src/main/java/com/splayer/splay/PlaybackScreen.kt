@@ -73,6 +73,10 @@ fun PlaybackScreen(
                 player.seekTo(target.coerceAtLeast(0L).let { if (player.duration > 0) it.coerceAtMost(player.duration) else it })
                 delay(450)
             }
+        } else if (seekStarted) {
+            delay(1800)
+            showVideoProgress = false
+            seekStarted = false
         }
     }
     LaunchedEffect(item.path, item.kind) {
@@ -97,6 +101,7 @@ fun PlaybackScreen(
                         keepScreenOn = true
                         isFocusable = true
                         isFocusableInTouchMode = true
+                        var longOkHandled = false
                         setOnKeyListener { _, keyCode, event ->
                             val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
                             val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
@@ -105,7 +110,8 @@ fun PlaybackScreen(
                             when (event.action) {
                                 android.view.KeyEvent.ACTION_DOWN -> when {
                                     center -> {
-                                        if (event.repeatCount > 0) {
+                                        if (event.repeatCount > 0 && !longOkHandled) {
+                                            longOkHandled = true
                                             videoScaleFilled = !videoScaleFilled
                                             resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                                         }
@@ -116,7 +122,11 @@ fun PlaybackScreen(
                                     else -> false
                                 }
                                 android.view.KeyEvent.ACTION_UP -> when {
-                                    center -> { if (event.repeatCount == 0) { if (player.isPlaying) player.pause() else player.play() }; true }
+                                    center -> {
+                                        if (!longOkHandled) { if (player.isPlaying) player.pause() else player.play() }
+                                        longOkHandled = false
+                                        true
+                                    }
                                     right -> { heldDirection = 0; if (!seekStarted) onNext(); true }
                                     left -> { heldDirection = 0; if (!seekStarted) onPrevious(); true }
                                     else -> false
@@ -139,6 +149,7 @@ fun PlaybackScreen(
                     View(viewContext).apply {
                         isFocusable = true
                         isFocusableInTouchMode = true
+                        var longOkHandled = false
                         setOnKeyListener { _, keyCode, event ->
                             val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                                 keyCode == android.view.KeyEvent.KEYCODE_ENTER
@@ -146,13 +157,17 @@ fun PlaybackScreen(
                             val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
                             when (event.action) {
                                 android.view.KeyEvent.ACTION_DOWN -> when {
-                                    center -> true
+                                    center -> { if (event.repeatCount > 0) longOkHandled = true; true }
                                     right -> { if (event.repeatCount == 0) heldDirection = 1; true }
                                     left -> { if (event.repeatCount == 0) heldDirection = -1; true }
                                     else -> false
                                 }
                                 android.view.KeyEvent.ACTION_UP -> when {
-                                    center -> { if (event.repeatCount == 0) { if (player.isPlaying) player.pause() else player.play() }; true }
+                                    center -> {
+                                        if (!longOkHandled) { if (player.isPlaying) player.pause() else player.play() }
+                                        longOkHandled = false
+                                        true
+                                    }
                                     right -> { heldDirection = 0; if (!seekStarted) onNext(); true }
                                     left -> { heldDirection = 0; if (!seekStarted) onPrevious(); true }
                                     else -> false
@@ -209,6 +224,7 @@ fun PlaybackScreen(
                 }
             }
         }
+    }
 }
 
 private fun formatTime(milliseconds: Long): String {
