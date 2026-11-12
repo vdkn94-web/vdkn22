@@ -191,6 +191,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     activeItem = queue[queueIndex]
                 }
             },
+            upcomingItems = queue.drop(queueIndex + 1).take(2),
             onStop = { activeItem = null }
         )
         }
