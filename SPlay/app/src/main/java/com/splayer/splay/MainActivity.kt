@@ -170,7 +170,7 @@ private class SmbBrowser {
     private var listingIterator: Iterator<FileIdBothDirectoryInformation>? = null
     private var listingPath: String? = null
 
-    fun listPage(path: String, reset: Boolean, pageSize: Int = 80): Pair<List<RemoteEntry>, Boolean> {
+    fun listPage(path: String, reset: Boolean, pageSize: Int = 40): Pair<List<RemoteEntry>, Boolean> {
         val activeShare = share ?: error("Сначала подключись к SMB-папке")
         if (reset || listingPath != path || listingIterator == null) {
             closeListing()
@@ -286,10 +286,8 @@ private fun SPlayApp() {
         val accepted = artCache.request(entry.path, audio) { result ->
             scope.launch { mediaArts = mediaArts + (entry.path to result) }
         }
-        if (!accepted) scope.launch {
-            delay(800)
-            requestMediaArt(entry, audio)
-        }
+        // Do not spin retry coroutines when the bounded FFmpeg queue is full.
+        // Lazy items will request artwork again when they are composed on screen.
     }
 
     val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800")) }
