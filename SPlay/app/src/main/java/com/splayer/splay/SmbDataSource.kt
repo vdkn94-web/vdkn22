@@ -36,6 +36,9 @@ class SmbDataSource(
     private var currentPosition = 0L
     private var bytesRemaining = C.LENGTH_UNSET.toLong()
     private var transferOpen = false
+    private val readAhead = ByteArray(READ_AHEAD_BYTES)
+    private var readAheadOffset = 0
+    private var readAheadLength = 0
 
     override fun open(dataSpec: DataSpec): Long {
         transferInitializing(dataSpec)
@@ -52,6 +55,7 @@ class SmbDataSource(
                 SmbConfig.builder()
                     .withTimeout(60, TimeUnit.SECONDS)
                     .withSoTimeout(60, TimeUnit.SECONDS)
+                    .withReadBufferSize(READ_AHEAD_BYTES)
                     .build()
             )
             client = smbClient
@@ -78,6 +82,8 @@ class SmbDataSource(
             } else {
                 minOf(dataSpec.length, fileLength - currentPosition)
             }
+            readAheadOffset = 0
+            readAheadLength = 0
             currentUri = uri
             transferStarted(dataSpec)
             transferOpen = true
@@ -93,24 +99,34 @@ class SmbDataSource(
         if (length == 0) return 0
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
         val file = remoteFile ?: throw IOException("SMB-файл не открыт")
-        val requested = if (bytesRemaining == C.LENGTH_UNSET.toLong()) {
-            length
-        } else {
-            minOf(length.toLong(), bytesRemaining).toInt()
+
+        if (readAheadOffset >= readAheadLength) {
+            val requested = if (bytesRemaining == C.LENGTH_UNSET.toLong()) {
+                readAhead.size
+            } else {
+                minOf(readAhead.size.toLong(), bytesRemaining).toInt()
+            }
+            val count = try {
+                file.read(readAhead, currentPosition, 0, requested)
+            } catch (error: Exception) {
+                throw IOException("Ошибка чтения SMB-файла", error)
+            }
+            if (count <= 0) {
+                bytesRemaining = 0
+                return C.RESULT_END_OF_INPUT
+            }
+            currentPosition += count
+            readAheadOffset = 0
+            readAheadLength = count
         }
-        val count = try {
-            file.read(buffer, currentPosition, offset, requested)
-        } catch (error: Exception) {
-            throw IOException("Ошибка чтения SMB-файла", error)
-        }
-        if (count < 0) {
-            bytesRemaining = 0
-            return C.RESULT_END_OF_INPUT
-        }
-        currentPosition += count
-        if (bytesRemaining != C.LENGTH_UNSET.toLong()) bytesRemaining -= count
-        bytesTransferred(count)
-        return count
+
+        val available = readAheadLength - readAheadOffset
+        val copied = minOf(length, available, if (bytesRemaining == C.LENGTH_UNSET.toLong()) Int.MAX_VALUE else bytesRemaining.toInt())
+        System.arraycopy(readAhead, readAheadOffset, buffer, offset, copied)
+        readAheadOffset += copied
+        if (bytesRemaining != C.LENGTH_UNSET.toLong()) bytesRemaining -= copied
+        bytesTransferred(copied)
+        return copied
     }
 
     override fun getUri(): Uri? = currentUri
@@ -118,6 +134,8 @@ class SmbDataSource(
     override fun close() {
         currentUri = null
         closeResources()
+        readAheadOffset = 0
+        readAheadLength = 0
         if (transferOpen) {
             transferOpen = false
             transferEnded()
@@ -136,11 +154,15 @@ class SmbDataSource(
         runCatching { client?.close() }
         client = null
     }
+
+    companion object {
+        private const val READ_AHEAD_BYTES = 1024 * 1024
+    }
 }
 
 object SmbMediaUri {
     fun create(settings: SmbSettings, relativePath: String): Uri {
-        val encodedPath = Uri.encode(relativePath.replace('\\', '/'), "/")
+        val encodedPath = Uri.encode(relativePath.replace('\\\\', '/'), "/")
         return Uri.parse("smb://${settings.server}/${Uri.encode(settings.share)}/$encodedPath")
     }
 }
