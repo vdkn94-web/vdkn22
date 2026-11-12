@@ -62,6 +62,7 @@ fun PlaybackScreen(
     var videoScaleFilled by remember(item.path) { mutableStateOf(false) }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
+    val playbackPlayer = player
 
     LaunchedEffect(heldDirection) {
         if (heldDirection != 0) {
@@ -139,7 +140,7 @@ fun PlaybackScreen(
                     }.apply {
                         useController = false
                         resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        player = player
+                        this.player = playbackPlayer
                         keepScreenOn = true
                         isFocusable = true
                         isFocusableInTouchMode = true
@@ -147,7 +148,7 @@ fun PlaybackScreen(
                     }
                 },
                 update = {
-                    it.player = player
+                    it.player = playbackPlayer
                     it.resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                 },
                 modifier = Modifier.fillMaxSize()
