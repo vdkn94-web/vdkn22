@@ -10,6 +10,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -203,17 +204,21 @@ fun PlaybackScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
-            Column(
-                Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 112.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            BoxWithConstraints(
+                Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 112.dp)
             ) {
+                val coverSize = minOf(360.dp, maxHeight * 0.48f)
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                 val cover = trackInfo.cover
                 if (cover != null) {
-                    Image(bitmap = cover.asImageBitmap(), contentDescription = "Обложка альбома", modifier = Modifier.size(360.dp))
+                    Image(bitmap = cover.asImageBitmap(), contentDescription = "Обложка альбома", modifier = Modifier.size(coverSize))
                 } else {
                     Surface(
-                        modifier = Modifier.size(360.dp),
+                        modifier = Modifier.size(coverSize),
                         shape = RoundedCornerShape(18.dp),
                         colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF252B34))
                     ) {
@@ -226,6 +231,7 @@ fun PlaybackScreen(
                 Text(trackInfo.title, color = Color.White, fontSize = 25.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(trackInfo.artist, color = Color(0xFFADB5C2), fontSize = 18.sp)
+                }
             }
         }
 
