@@ -130,7 +130,11 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
         } else {
             val settings = currentSmbSettings()
             try {
+                val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(60_000, 180_000, 2_500, 8_000)
+                    .build()
                 val exo = ExoPlayer.Builder(context)
+                    .setLoadControl(loadControl)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(SmbDataSourceFactory { settings }))
                     .build()
                 exo.setMediaItem(androidx.media3.common.MediaItem.fromUri(SmbMediaUri.create(settings, item.path)))
@@ -219,17 +223,12 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     Section.VIDEO -> {
                         Text("Видео", fontSize = 30.sp, color = Color.White)
                         Spacer(Modifier.height(10.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                            Button(onClick = { viewModel.scan(MediaKind.VIDEO) }, enabled = !videoState.scanning) {
-                                Text(if (videoState.scanning) "Сканирование…" else "Сканировать видео")
-                            }
-                            Text(
-                                if (videoState.scanning) "Папок: ${videoState.visitedFolders} · Файлов: ${videoState.foundFiles}"
-                                else videoState.message.ifBlank { status },
-                                color = Color(0xFFADB5C2),
-                                fontSize = 14.sp
-                            )
-                        }
+                        Text(
+                            if (videoState.scanning) "Сканирование · Папок: ${videoState.visitedFolders} · Файлов: ${videoState.foundFiles}"
+                            else videoState.message.ifBlank { status },
+                            color = Color(0xFFADB5C2),
+                            fontSize = 14.sp
+                        )
                         Spacer(Modifier.height(12.dp))
                         MediaList(videoState.items, "Видео пока не найдены") { item ->
                             queue = videoState.items
@@ -240,17 +239,12 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     Section.MUSIC -> {
                         Text("Музыка", fontSize = 30.sp, color = Color.White)
                         Spacer(Modifier.height(10.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                            Button(onClick = { viewModel.scan(MediaKind.MUSIC) }, enabled = !musicState.scanning) {
-                                Text(if (musicState.scanning) "Сканирование…" else "Сканировать музыку")
-                            }
-                            Text(
-                                if (musicState.scanning) "Папок: ${musicState.visitedFolders} · Треков: ${musicState.foundFiles}"
-                                else musicState.message,
-                                color = Color(0xFFADB5C2),
-                                fontSize = 14.sp
-                            )
-                        }
+                        Text(
+                            if (musicState.scanning) "Сканирование · Папок: ${musicState.visitedFolders} · Треков: ${musicState.foundFiles}"
+                            else musicState.message,
+                            color = Color(0xFFADB5C2),
+                            fontSize = 14.sp
+                        )
                         Spacer(Modifier.height(12.dp))
                         MediaList(musicState.items, "Музыкальные треки пока не найдены") { item ->
                             queue = musicState.items
@@ -298,7 +292,10 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                                         password = ""
                                         status = "Настройки сохранены. Проверяю подключение…"
                                         SPlayLog.info("Settings", "Connection and scan folder settings saved")
-                                        viewModel.testConnection { status = it }
+                                        viewModel.testConnection {
+                                            status = it
+                                            if (it == "Подключение успешно") viewModel.scanAll()
+                                        }
                                     }) { Text("Сохранить и подключиться") }
                                 }
                                 Spacer(Modifier.height(10.dp))
