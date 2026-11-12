@@ -357,7 +357,7 @@ private fun SPlayApp() {
     var username by rememberSaveable { mutableStateOf(preferences.getString("username", "") ?: "") }
     var password by rememberSaveable { mutableStateOf(preferences.getString("password", "") ?: "") }
     var domain by rememberSaveable { mutableStateOf(preferences.getString("domain", "") ?: "") }
-    var mediaSection by rememberSaveable { mutableStateOf("Все") }
+    var mediaSection by rememberSaveable { mutableStateOf("Видео") }
     var sidebarExpanded by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var settingsTab by rememberSaveable { mutableStateOf("Подключение") }
@@ -383,6 +383,7 @@ private fun SPlayApp() {
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
     val playerFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val playButtonFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
     val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
     val saveLogsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
@@ -498,18 +499,22 @@ private fun SPlayApp() {
         busy = true
         errorText = null
         scope.launch {
+            var startVideoScan = false
             try {
-                val initialPath = ""
+                val initialPath = videoFolder.trim()
                 preferences.edit().remove("start_folder").putString("host", host.trim()).putString("share", shareName.trim()).putString("last_path", initialPath).putString("username", username.trim()).putString("password", password).putString("domain", domain.trim()).apply()
-                val initialEntries = withContext(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     browser.connect(host, shareName, username, password, domain)
-                    browser.listPage(initialPath, true)
                 }
-                entries = initialEntries.first
-                hasMoreEntries = initialEntries.second
+                entries = emptyList()
+                hasMoreEntries = false
                 currentPath = initialPath
-                preferences.edit().putString("last_path", initialPath).apply()
+                mediaSection = "Видео"
+                showSettings = false
+                showSearch = false
                 connected = true
+                startVideoScan = true
+                SPlayLog.add("SMB connected; opening Video library at '$initialPath'")
             } catch (e: Exception) {
                 SPlayLog.add("SMB connect failed: ${e.stackTraceToString()}")
                 connected = false
@@ -517,6 +522,7 @@ private fun SPlayApp() {
             } finally {
                 busy = false
                 autoConnecting = false
+                if (startVideoScan) scanVideoLibrary(videoFolder.trim())
             }
         }
     }
@@ -587,11 +593,25 @@ private fun SPlayApp() {
     }
 
     LaunchedEffect(Unit) {
+        mediaSection = "Видео"
         if (host.isNotBlank() && shareName.isNotBlank()) { autoConnecting = true; connect() }
     }
 
     LaunchedEffect(nowPlaying) {
-        if (nowPlaying != null) { delay(150); runCatching { playerFocusRequester.requestFocus() } }
+        if (nowPlaying != null) {
+            controlsVisible = true
+            delay(200)
+            runCatching { playerFocusRequester.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(controlsVisible, nowPlaying) {
+        if (nowPlaying == null) return@LaunchedEffect
+        delay(100)
+        runCatching {
+            if (controlsVisible) playButtonFocusRequester.requestFocus()
+            else playerFocusRequester.requestFocus()
+        }
     }
 
     DisposableEffect(Unit) {
@@ -627,17 +647,15 @@ private fun SPlayApp() {
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         if (nowPlaying != null) {
             Column(Modifier.fillMaxSize().background(Color.Black).focusRequester(playerFocusRequester).focusable().onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) false else {
+                if (event.type != KeyEventType.KeyDown || controlsVisible) false else {
                     when (event.key) {
-                        Key.DirectionCenter, Key.Enter -> {
-                            if (!controlsVisible) controlsVisible = true
-                            else if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play()
+                        Key.DirectionCenter, Key.Enter, Key.DirectionUp, Key.DirectionDown -> {
+                            controlsVisible = true
                             true
                         }
-                        Key.DirectionLeft -> { controlsVisible = true; mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L); true }
-                        Key.DirectionRight -> { controlsVisible = true; mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)); true }
-                        Key.DirectionUp, Key.DirectionDown -> { controlsVisible = true; true }
-                        else -> { controlsVisible = true; false }
+                        Key.DirectionLeft -> { mediaPlayer.time = (mediaPlayer.time - 10000L).coerceAtLeast(0L); true }
+                        Key.DirectionRight -> { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)); true }
+                        else -> false
                     }
                 }
             }) {
@@ -691,7 +709,7 @@ private fun SPlayApp() {
                             queueIndex = if (current == null) -1 else 0
                         }) { Icon(Icons.Filled.Shuffle, "Перемешать", tint = if (shuffleEnabled) AccentColor else Color.LightGray) }
                         TextButton(onClick = { playQueueStep(-1) }, enabled = queueIndex > 0) { Icon(Icons.Filled.SkipPrevious, "Предыдущий") }
-                        Button(onClick = { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play() }) { Text(if (playbackPlaying) "Ⅱ  Пауза" else "▶  Играть") }
+                        Button(onClick = { if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.play() }, modifier = Modifier.focusRequester(playButtonFocusRequester)) { Text(if (playbackPlaying) "Ⅱ  Пауза" else "▶  Играть") }
                         TextButton(onClick = { playQueueStep(1) }, enabled = queueIndex < playQueue.lastIndex) { Icon(Icons.Filled.SkipNext, "Следующий") }
                         TextButton(onClick = { mediaPlayer.time = (mediaPlayer.time + 10000L).coerceAtMost(mediaPlayer.length.coerceAtLeast(0L)) }) { Text("10"); Icon(Icons.Filled.FastForward, null) }
                         TextButton(onClick = { controlsVisible = false }) { Text("Скрыть") }
