@@ -2,6 +2,7 @@ package com.splayer.splay
 
 import android.content.Context
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -34,8 +35,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -102,17 +103,16 @@ fun PlaybackScreen(
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .onPreviewKeyEvent { event ->
-                val native = event.nativeKeyEvent
                 val center = event.key == Key.DirectionCenter || event.key == Key.Enter
                 val right = event.key == Key.DirectionRight
                 val left = event.key == Key.DirectionLeft
                 when {
                     center && native.action == android.view.KeyEvent.ACTION_DOWN -> {
-                        if (centerDownAt == 0L) centerDownAt = native.downTime
+                        if (centerDownAt == 0L) centerDownAt = android.os.SystemClock.uptimeMillis()
                         true
                     }
                     center && native.action == android.view.KeyEvent.ACTION_UP -> {
-                        val heldMs = (native.eventTime - centerDownAt).coerceAtLeast(0L)
+                        val heldMs = (android.os.SystemClock.uptimeMillis() - centerDownAt).coerceAtLeast(0L)
                         centerDownAt = 0L
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
                             videoScaleFilled = !videoScaleFilled
@@ -122,7 +122,7 @@ fun PlaybackScreen(
                         true
                     }
                     (right || left) && event.type == KeyEventType.KeyDown -> {
-                        if (native.repeatCount == 0) heldDirection = if (right) 1 else -1
+                        heldDirection = if (right) 1 else -1
                         true
                     }
                     (right || left) && event.type == KeyEventType.KeyUp -> {
@@ -161,30 +161,31 @@ fun PlaybackScreen(
             BoxWithConstraints(
                 Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 112.dp)
             ) {
-                val coverSize = minOf(360.dp, maxHeight * 0.48f)
-                Column(
+                val coverSize = minOf(440.dp, maxHeight * 0.82f)
+                Row(
                     Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.spacedBy(42.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                val cover = trackInfo.cover
-                if (cover != null) {
-                    Image(bitmap = cover.asImageBitmap(), contentDescription = "Обложка альбома", modifier = Modifier.size(coverSize))
-                } else {
-                    Surface(
-                        modifier = Modifier.size(coverSize),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF252B34))
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("♫", fontSize = 110.sp, color = Color(0xFF9EBCE0))
+                    val cover = trackInfo.cover
+                    if (cover != null) {
+                        Image(bitmap = cover.asImageBitmap(), contentDescription = "Обложка альбома", modifier = Modifier.size(coverSize))
+                    } else {
+                        Surface(
+                            modifier = Modifier.size(coverSize),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color(0xFF252B34))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("♫", fontSize = 140.sp, color = Color(0xFF9EBCE0))
+                            }
                         }
                     }
-                }
-                Spacer(Modifier.height(20.dp))
-                Text(trackInfo.title, color = Color.White, fontSize = 25.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(trackInfo.artist, color = Color(0xFFADB5C2), fontSize = 18.sp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                        Text(trackInfo.artist, color = Color(0xFFADB5C2), fontSize = 22.sp, maxLines = 1, modifier = Modifier.fillMaxWidth().basicMarquee())
+                        Spacer(Modifier.height(14.dp))
+                        Text(trackInfo.title, color = Color.White, fontSize = 30.sp, maxLines = 1, modifier = Modifier.fillMaxWidth().basicMarquee())
+                    }
                 }
             }
         }
