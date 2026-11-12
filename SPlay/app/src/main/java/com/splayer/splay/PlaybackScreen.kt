@@ -1,7 +1,6 @@
 package com.splayer.splay
 
 import android.content.Context
-import android.view.TextureView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Canvas
@@ -108,11 +107,11 @@ fun PlaybackScreen(
                 val right = event.key == Key.DirectionRight
                 val left = event.key == Key.DirectionLeft
                 when {
-                    center && native.action == android.view.KeyEvent.ACTION_DOWN -> {
+                    center && event.type == KeyEventType.KeyDown -> {
                         if (centerDownAt == 0L) centerDownAt = android.os.SystemClock.uptimeMillis()
                         true
                     }
-                    center && native.action == android.view.KeyEvent.ACTION_UP -> {
+                    center && event.type == KeyEventType.KeyUp -> {
                         val heldMs = (android.os.SystemClock.uptimeMillis() - centerDownAt).coerceAtLeast(0L)
                         centerDownAt = 0L
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
@@ -144,7 +143,6 @@ fun PlaybackScreen(
             AndroidView(
                 factory = { viewContext ->
                     PlayerView(viewContext).apply {
-                        setVideoTextureView(TextureView(viewContext))
                         useController = false
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         this.player = playbackPlayer
