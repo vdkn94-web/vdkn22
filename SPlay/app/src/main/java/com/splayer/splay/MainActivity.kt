@@ -709,7 +709,6 @@ private fun SPlayApp() {
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     sidebarExpanded = false
-                                    scope.launch { delay(140); contentFocusRequester.requestFocus() }
                                     true
                                 } else false
                             }
@@ -777,7 +776,9 @@ private fun SPlayApp() {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             listOf("Подключение", "Папки", "Логи").forEach { tab ->
                                 if (settingsTab == tab) Button(onClick = { settingsTab = tab }) { Text(tab) }
-                            else TextButton(onClick = { settingsTab = tab }) { Text(tab, color = AccentColor) }
+                                else TextButton(onClick = { settingsTab = tab }) { Text(tab, color = AccentColor) }
+                            }
+                        }
                         Spacer(Modifier.height(12.dp))
                         when (settingsTab) {
                             "Подключение" -> Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
@@ -850,7 +851,7 @@ private fun SPlayApp() {
                     } else {
                         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(visibleEntries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) }, modifier = Modifier,
+                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) else true }, modifier = Modifier,
                                     onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
                             }
                             if (hasMoreEntries) item {
