@@ -94,14 +94,9 @@ fun PlaybackScreen(
         if (item.kind == MediaKind.VIDEO) {
             AndroidView(
                 factory = { viewContext ->
-                    PlayerView(viewContext).apply {
-                        useController = false
-                        resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        this.player = player
-                        keepScreenOn = true
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        var centerDownAt = 0L
+                    object : PlayerView(viewContext) {
+                        private var centerDownAt = 0L
+
                         override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
                             val right = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
                             val left = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
@@ -134,8 +129,6 @@ fun PlaybackScreen(
                                 if (event.action == android.view.KeyEvent.ACTION_UP) {
                                     heldDirection = 0
                                     if (!seekStarted) {
-                                        videoScaleFilled = false
-                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                                         if (right) onNext() else onPrevious()
                                     }
                                     return true
@@ -143,6 +136,13 @@ fun PlaybackScreen(
                             }
                             return super.dispatchKeyEvent(event)
                         }
+                    }.apply {
+                        useController = false
+                        resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        player = player
+                        keepScreenOn = true
+                        isFocusable = true
+                        isFocusableInTouchMode = true
                         requestFocus()
                     }
                 },
@@ -155,10 +155,9 @@ fun PlaybackScreen(
         } else {
             AndroidView(
                 factory = { viewContext ->
-                    View(viewContext).apply {
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        var centerDownAt = 0L
+                    object : View(viewContext) {
+                        private var centerDownAt = 0L
+
                         override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
                             val center = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                                 event.keyCode == android.view.KeyEvent.KEYCODE_ENTER
@@ -173,7 +172,9 @@ fun PlaybackScreen(
                                     android.view.KeyEvent.ACTION_UP -> {
                                         val heldMs = (event.eventTime - centerDownAt).coerceAtLeast(0L)
                                         centerDownAt = 0L
-                                        if (heldMs < 500L) { if (player.isPlaying) player.pause() else player.play() }
+                                        if (heldMs < 500L) {
+                                            if (player.isPlaying) player.pause() else player.play()
+                                        }
                                         return true
                                     }
                                 }
@@ -185,12 +186,17 @@ fun PlaybackScreen(
                                 }
                                 if (event.action == android.view.KeyEvent.ACTION_UP) {
                                     heldDirection = 0
-                                    if (!seekStarted) { if (right) onNext() else onPrevious() }
+                                    if (!seekStarted) {
+                                        if (right) onNext() else onPrevious()
+                                    }
                                     return true
                                 }
                             }
                             return super.dispatchKeyEvent(event)
                         }
+                    }.apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
                         requestFocus()
                     }
                 },
