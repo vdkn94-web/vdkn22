@@ -368,6 +368,7 @@ private fun SPlayApp() {
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
     var hasMoreEntries by remember { mutableStateOf(false) }
     var connected by remember { mutableStateOf(false) }
+    var autoConnecting by remember { mutableStateOf(host.isNotBlank() && shareName.isNotBlank()) }
     var busy by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var nowPlaying by remember { mutableStateOf<RemoteEntry?>(null) }
@@ -381,8 +382,7 @@ private fun SPlayApp() {
     var queueIndex by remember { mutableStateOf(-1) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var videoLayout by remember { mutableStateOf<VLCVideoLayout?>(null) }
-    val contentFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    val sidebarFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val playerFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var mediaArts by remember { mutableStateOf<Map<String, MediaArtResult>>(emptyMap()) }
     val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
     val saveLogsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
@@ -392,18 +392,13 @@ private fun SPlayApp() {
         }
     }
 
-    fun requestMediaArt(entry: RemoteEntry, audio: Boolean) {
-        if (mediaArts.containsKey(entry.path)) return
-        val accepted = artCache.request(entry.path, audio) { result ->
-            scope.launch { mediaArts = mediaArts + (entry.path to result) }
-        }
-        // Do not spin retry coroutines when the bounded FFmpeg queue is full.
-        // Lazy items will request artwork again when they are composed on screen.
+    fun requestMediaArt(entry: RemoteEntry, audio: Boolean): Boolean {
+        if (mediaArts.containsKey(entry.path)) return true
+        return artCache.request(entry.path, audio) { result -> scope.launch { mediaArts = mediaArts + (entry.path to result) } }
     }
 
     val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800", "--verbose=2")) }
     val mediaPlayer = remember { MediaPlayer(libVlc) }
-    val settingsFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
 
     DisposableEffect(mediaPlayer) {
         mediaPlayer.setEventListener { event ->
@@ -521,6 +516,7 @@ private fun SPlayApp() {
                 errorText = e.message ?: "Не удалось подключиться к SMB"
             } finally {
                 busy = false
+                autoConnecting = false
             }
         }
     }
@@ -591,20 +587,11 @@ private fun SPlayApp() {
     }
 
     LaunchedEffect(Unit) {
-        if (host.isNotBlank() && shareName.isNotBlank()) connect()
+        if (host.isNotBlank() && shareName.isNotBlank()) { autoConnecting = true; connect() }
     }
 
-    LaunchedEffect(sidebarExpanded, busy, entries.firstOrNull()?.path, showSettings, showSearch) {
-        if (sidebarExpanded) {
-            delay(60)
-            sidebarFocusRequester.requestFocus()
-        } else if (showSettings) {
-            delay(120)
-            runCatching { settingsFocusRequester.requestFocus() }
-        } else if (connected && nowPlaying == null && !showSearch && !busy && entries.isNotEmpty()) {
-            delay(100)
-            runCatching { contentFocusRequester.requestFocus() }
-        }
+    LaunchedEffect(nowPlaying) {
+        if (nowPlaying != null) { delay(150); runCatching { playerFocusRequester.requestFocus() } }
     }
 
     DisposableEffect(Unit) {
@@ -639,7 +626,7 @@ private fun SPlayApp() {
 
     Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         if (nowPlaying != null) {
-            Column(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+            Column(Modifier.fillMaxSize().background(Color.Black).focusRequester(playerFocusRequester).focusable().onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) false else {
                     when (event.key) {
                         Key.DirectionCenter, Key.Enter -> {
@@ -662,6 +649,9 @@ private fun SPlayApp() {
                 if (videoMode) {
                     AndroidView(factory = { viewContext ->
                         VLCVideoLayout(viewContext).also { layout ->
+                            layout.isFocusable = false
+                            layout.isFocusableInTouchMode = false
+                            layout.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                             videoLayout = layout
                             mediaPlayer.attachViews(layout, null, false, false)
                             SPlayLog.add("VLC video surface attached for ${nowPlaying?.path}")
@@ -730,8 +720,14 @@ private fun SPlayApp() {
                             if (sidebarExpanded) Text("Play", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         }
                         if (sidebarExpanded) Text("БИБЛИОТЕКА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded, modifier = Modifier.focusRequester(sidebarFocusRequester)) { mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; searchQuery = ""; scanVideoLibrary(videoFolder.trim().replace("/", "\\").trim('\\')) }
-                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) { mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; refresh(musicFolder.trim().replace("/", "\\").trim('\\')) }
+                        SidebarItem(Icons.Filled.VideoLibrary, "Видео", mediaSection == "Видео", sidebarExpanded) {
+                            mediaSection = "Видео"; showSettings = false; showSearch = false; sidebarExpanded = false; searchQuery = ""
+                            scope.launch { while (busy) delay(100); scanVideoLibrary(videoFolder.trim()) }
+                        }
+                        SidebarItem(Icons.Filled.MusicNote, "Музыка", mediaSection == "Музыка", sidebarExpanded) {
+                            mediaSection = "Музыка"; showSettings = false; showSearch = false; sidebarExpanded = false; searchQuery = ""
+                            scope.launch { while (busy) delay(100); refresh(musicFolder.trim()) }
+                        }
                         SidebarItem(Icons.Filled.Search, "Поиск", showSearch, sidebarExpanded) { showSearch = true; showSettings = false; sidebarExpanded = false }
                         Spacer(Modifier.weight(1f))
                         SidebarItem(Icons.Filled.Settings, "Настройки", showSettings, sidebarExpanded) { showSettings = true; sidebarExpanded = false }
@@ -746,11 +742,15 @@ private fun SPlayApp() {
                             } else false
                         }
                 ) {
-                if (!connected) {
+                if (!connected && autoConnecting) {
+                    Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Text("SPLAY", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                        Spacer(Modifier.height(18.dp)); CircularProgressIndicator(color = AccentColor); Spacer(Modifier.height(12.dp))
+                        Text("Подключаемся к медиатеке…", color = Color.LightGray, fontSize = 15.sp)
+                    }
+                } else if (!connected) {
                     Text("SPlay", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(18.dp))
-                }
-                if (!connected) {
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
                         Text("Подключение к SMB", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
@@ -776,11 +776,8 @@ private fun SPlayApp() {
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             listOf("Подключение", "Папки", "Логи").forEach { tab ->
-                                val tabModifier = if (tab == "Подключение") Modifier.focusRequester(settingsFocusRequester) else Modifier
-                                if (settingsTab == tab) Button(onClick = { settingsTab = tab }, modifier = tabModifier) { Text(tab) }
-                                else TextButton(onClick = { settingsTab = tab }, modifier = tabModifier) { Text(tab, color = AccentColor) }
-                            }
-                        }
+                                if (settingsTab == tab) Button(onClick = { settingsTab = tab }) { Text(tab) }
+                            else TextButton(onClick = { settingsTab = tab }) { Text(tab, color = AccentColor) }
                         Spacer(Modifier.height(12.dp))
                         when (settingsTab) {
                             "Подключение" -> Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
@@ -846,14 +843,14 @@ private fun SPlayApp() {
                     } else if (mediaSection == "Видео" && !showSearch) {
                         LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 210.dp), modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             gridItems(visibleEntries, key = { it.path }) { entry ->
-                                VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) }, modifier = if (entry.path == visibleEntries.firstOrNull()?.path) Modifier.focusRequester(contentFocusRequester) else Modifier,
+                                VideoTile(entry = entry, art = mediaArts[entry.path], requestArt = { requestMediaArt(entry, false) }, modifier = Modifier,
                                     onClick = { if (entry.directory) refresh(entry.path) else play(entry) })
                             }
                         }
                     } else {
                         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(visibleEntries, key = { it.path }) { entry ->
-                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) }, modifier = if (entry.path == visibleEntries.firstOrNull()?.path) Modifier.focusRequester(contentFocusRequester) else Modifier,
+                                EntryRow(entry = entry, art = mediaArts[entry.path], requestArt = { if (isAudio(entry.name)) requestMediaArt(entry, true) }, modifier = Modifier,
                                     onClick = { if (entry.directory) { searchQuery = ""; refresh(entry.path) } else play(entry) })
                             }
                             if (hasMoreEntries) item {
@@ -879,7 +876,9 @@ private fun SidebarItem(icon: ImageVector, title: String, selected: Boolean, exp
     Surface(
         color = if (selected) Color(0x553F5F91) else Color.Transparent,
         shape = RoundedCornerShape(12.dp),
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).focusable()
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp)
+            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter)) { onClick(); true } else false }
+            .clickable(onClick = onClick).focusable()
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 0.dp, vertical = 14.dp),
@@ -913,8 +912,8 @@ private fun rememberArtworkBitmap(file: File?): androidx.compose.ui.graphics.Ima
 }
 
 @Composable
-private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    LaunchedEffect(entry.path) { if (!entry.directory && isAudio(entry.name)) requestArt() }
+private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    LaunchedEffect(entry.path) { if (!entry.directory && isAudio(entry.name)) while (!requestArt()) delay(350) }
     val artBitmap = rememberArtworkBitmap(art?.image)
     Card(
         modifier = modifier.fillMaxWidth().height(66.dp).clickable(onClick = onClick).focusable(),
@@ -966,7 +965,8 @@ private fun EntryRow(entry: RemoteEntry, art: MediaArtResult?, requestArt: () ->
 }
 
 @Composable
-private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun VideoTile(entry: RemoteEntry, art: MediaArtResult?, requestArt: () -> Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    LaunchedEffect(entry.path) { if (!entry.directory) while (!requestArt()) delay(350) }
     val artBitmap = rememberArtworkBitmap(art?.image)
     Card(modifier = modifier.fillMaxWidth().clickable(onClick = onClick).onFocusChanged { if (it.isFocused && !entry.directory) requestArt() }.focusable(),
         colors = CardDefaults.cardColors(containerColor = PanelColor), shape = RoundedCornerShape(10.dp)) {
