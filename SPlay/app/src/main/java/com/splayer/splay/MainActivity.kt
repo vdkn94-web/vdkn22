@@ -273,7 +273,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                         Text("Настройки", fontSize = 30.sp, color = Color.White)
                         Spacer(Modifier.height(18.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf("Подключение", "Папка к файлам", "Логи").forEach { tab ->
+                            listOf("Подключение", "Логи").forEach { tab ->
                                 Button(onClick = { settingsTab = tab }) {
                                     Text(if (settingsTab == tab) "• $tab" else tab)
                                 }
@@ -286,29 +286,20 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                                 AppInput(share, { share = it }, "Общая папка SMB")
                                 AppInput(username, { username = it }, "Логин (можно Guest)")
                                 AppInput(password, { password = it }, "Пароль", secret = true)
+                                Spacer(Modifier.height(8.dp))
+                                AppInput(folder, { folder = it }, "Папка сканирования внутри общей папки (пусто — корень)")
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Button(onClick = {
                                         saveConnection(server, share, username, password)
+                                        SecurePreferences.put("folder", folder)
                                         password = ""
-                                        status = "Параметры подключения сохранены"
-                                        SPlayLog.info("Settings", "SMB connection settings saved")
-                                    }) { Text("Сохранить подключение") }
-                                    Button(onClick = {
-                                        saveConnection(server, share, username, password)
-                                        password = ""
+                                        status = "Настройки сохранены. Проверяю подключение…"
+                                        SPlayLog.info("Settings", "Connection and scan folder settings saved")
                                         viewModel.testConnection { status = it }
-                                    }) { Text("Проверить соединение") }
+                                    }) { Text("Сохранить и подключиться") }
                                 }
                                 Spacer(Modifier.height(10.dp))
                                 Text(status, color = Color(0xFFADB5C2), fontSize = 14.sp)
-                            }
-                            "Папка к файлам" -> {
-                                AppInput(folder, { folder = it }, "Путь внутри общей папки (пусто — корень)")
-                                Button(onClick = {
-                                    SecurePreferences.put("folder", folder)
-                                    status = "Папка сканирования сохранена"
-                                    SPlayLog.info("Settings", "Scan folder saved")
-                                }) { Text("Сохранить папку") }
                             }
                             "Логи" -> {
                                 Text("Журнал ошибок и событий приложения", color = Color(0xFFADB5C2))
