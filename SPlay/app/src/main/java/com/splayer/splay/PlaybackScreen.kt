@@ -1,7 +1,6 @@
 package com.splayer.splay
 
 import android.content.Context
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +21,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.*
@@ -91,12 +92,12 @@ fun PlaybackScreen(
         Modifier.fillMaxSize()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
-                val right = event.keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT
-                val left = event.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT
-                val center = event.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == AndroidKeyEvent.KEYCODE_ENTER
-                val upDown = event.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP || event.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
-                when (event.action) {
-                    AndroidKeyEvent.ACTION_DOWN -> {
+                val right = event.key == Key.DirectionRight
+                val left = event.key == Key.DirectionLeft
+                val center = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                val upDown = event.key == Key.DirectionUp || event.key == Key.DirectionDown
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
                         controlsVisible = true
                         interaction++
                         when {
@@ -107,7 +108,7 @@ fun PlaybackScreen(
                             else -> false
                         }
                     }
-                    AndroidKeyEvent.ACTION_UP -> {
+                    KeyEventType.KeyUp -> {
                         when {
                             right -> {
                                 heldDirection = 0
