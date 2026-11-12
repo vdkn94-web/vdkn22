@@ -55,6 +55,7 @@ fun PlaybackScreen(
     settings: SmbSettings,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    upcomingItems: List<MediaItem> = emptyList(),
     onStop: () -> Unit
 ) {
     var trackInfo by remember(item.path) {
@@ -92,6 +93,16 @@ fun PlaybackScreen(
     }
     LaunchedEffect(item.path, item.kind) {
         if (item.kind == MediaKind.MUSIC) trackInfo = artworkRepository.getTrackInfo(settings, item.path)
+    }
+    LaunchedEffect(item.path, upcomingItems) {
+        if (item.kind == MediaKind.MUSIC) {
+            upcomingItems.asSequence()
+                .filter { it.kind == MediaKind.MUSIC && it.path != item.path }
+                .take(2)
+                .forEach { next ->
+                    runCatching { artworkRepository.getTrackInfo(settings, next.path) }
+                }
+        }
     }
     LaunchedEffect(player) {
         while (true) {
@@ -153,18 +164,13 @@ fun PlaybackScreen(
                     }
                 },
                 update = {
-                    // Always reset to FIT before applying the requested mode. This prevents
-                    // a stale zoom/crop layout from carrying over to the next media item.
                     it.player = playbackPlayer
-                    it.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    it.post {
-                        it.resizeMode = if (videoScaleFilled) {
-                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        } else {
-                            AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        }
-                        it.requestLayout()
+                    it.resizeMode = if (videoScaleFilled) {
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    } else {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
+                    it.requestLayout()
                 },
                 modifier = Modifier.fillMaxSize()
             )
