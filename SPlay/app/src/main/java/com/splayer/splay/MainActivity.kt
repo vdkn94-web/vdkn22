@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -270,6 +272,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                         }
                     }
                     Section.SETTINGS -> {
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                         Text("Настройки", fontSize = 30.sp, color = Color.White)
                         Spacer(Modifier.height(18.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -306,6 +309,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                                 Spacer(Modifier.height(12.dp))
                                 Button(onClick = onExportLogs) { Text("Сохранить логи в TXT") }
                             }
+                        }
                         }
                     }
                 }
