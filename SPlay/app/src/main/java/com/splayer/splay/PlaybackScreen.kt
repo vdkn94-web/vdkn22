@@ -1,7 +1,6 @@
 package com.splayer.splay
 
 import android.content.Context
-import android.view.View
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -33,6 +32,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.*
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -64,6 +68,9 @@ fun PlaybackScreen(
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
     val playbackPlayer = player
+    val playbackFocus = remember { FocusRequester() }
+    var centerDownAt by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) { runCatching { playbackFocus.requestFocus() } }
 
     LaunchedEffect(heldDirection) {
         if (heldDirection != 0) {
@@ -92,60 +99,56 @@ fun PlaybackScreen(
             delay(300)
         }
     }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black)
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                val center = event.key == Key.DirectionCenter || event.key == Key.Enter
+                val right = event.key == Key.DirectionRight
+                val left = event.key == Key.DirectionLeft
+                when {
+                    center && event.type == KeyEventType.KeyDown -> {
+                        if (centerDownAt == 0L) centerDownAt = native.downTime
+                        true
+                    }
+                    center && event.type == KeyEventType.KeyUp -> {
+                        val heldMs = (native.eventTime - centerDownAt).coerceAtLeast(0L)
+                        centerDownAt = 0L
+                        if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
+                            videoScaleFilled = !videoScaleFilled
+                        } else if (heldMs < 500L) {
+                            if (player.isPlaying) player.pause() else player.play()
+                        }
+                        true
+                    }
+                    (right || left) && event.type == KeyEventType.KeyDown -> {
+                        if (native.repeatCount == 0) heldDirection = if (right) 1 else -1
+                        true
+                    }
+                    (right || left) && event.type == KeyEventType.KeyUp -> {
+                        heldDirection = 0
+                        if (!seekStarted) {
+                            videoScaleFilled = false
+                            if (right) onNext() else onPrevious()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .focusRequester(playbackFocus)
+            .focusable()
+    ) {
         if (item.kind == MediaKind.VIDEO) {
             AndroidView(
                 factory = { viewContext ->
-                    object : PlayerView(viewContext) {
-                        private var centerDownAt = 0L
-
-                        override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-                            val right = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
-                            val left = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
-                            val center = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-                                event.keyCode == android.view.KeyEvent.KEYCODE_ENTER
-                            if (center) {
-                                when (event.action) {
-                                    android.view.KeyEvent.ACTION_DOWN -> {
-                                        if (centerDownAt == 0L) centerDownAt = event.downTime
-                                        return true
-                                    }
-                                    android.view.KeyEvent.ACTION_UP -> {
-                                        val heldMs = (event.eventTime - centerDownAt).coerceAtLeast(0L)
-                                        centerDownAt = 0L
-                                        if (heldMs >= 500L) {
-                                            videoScaleFilled = !videoScaleFilled
-                                            resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                        } else {
-                                            if (player.isPlaying) player.pause() else player.play()
-                                        }
-                                        return true
-                                    }
-                                }
-                            }
-                            if (right || left) {
-                                if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                                    if (event.repeatCount == 0) heldDirection = if (right) 1 else -1
-                                    return true
-                                }
-                                if (event.action == android.view.KeyEvent.ACTION_UP) {
-                                    heldDirection = 0
-                                    if (!seekStarted) {
-                                        if (right) onNext() else onPrevious()
-                                    }
-                                    return true
-                                }
-                            }
-                            return super.dispatchKeyEvent(event)
-                        }
-                    }.apply {
+                    PlayerView(viewContext).apply {
                         useController = false
-                        resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        this.player = playbackPlayer
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        player = playbackPlayer
                         keepScreenOn = true
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        requestFocus()
+                        isFocusable = false
+                        isFocusableInTouchMode = false
                     }
                 },
                 update = {
@@ -155,55 +158,6 @@ fun PlaybackScreen(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            AndroidView(
-                factory = { viewContext ->
-                    object : View(viewContext) {
-                        private var centerDownAt = 0L
-
-                        override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-                            val center = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-                                event.keyCode == android.view.KeyEvent.KEYCODE_ENTER
-                            val right = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
-                            val left = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
-                            if (center) {
-                                when (event.action) {
-                                    android.view.KeyEvent.ACTION_DOWN -> {
-                                        if (centerDownAt == 0L) centerDownAt = event.downTime
-                                        return true
-                                    }
-                                    android.view.KeyEvent.ACTION_UP -> {
-                                        val heldMs = (event.eventTime - centerDownAt).coerceAtLeast(0L)
-                                        centerDownAt = 0L
-                                        if (heldMs < 500L) {
-                                            if (player.isPlaying) player.pause() else player.play()
-                                        }
-                                        return true
-                                    }
-                                }
-                            }
-                            if (right || left) {
-                                if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                                    if (event.repeatCount == 0) heldDirection = if (right) 1 else -1
-                                    return true
-                                }
-                                if (event.action == android.view.KeyEvent.ACTION_UP) {
-                                    heldDirection = 0
-                                    if (!seekStarted) {
-                                        if (right) onNext() else onPrevious()
-                                    }
-                                    return true
-                                }
-                            }
-                            return super.dispatchKeyEvent(event)
-                        }
-                    }.apply {
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        requestFocus()
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
             BoxWithConstraints(
                 Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 112.dp)
             ) {
