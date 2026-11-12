@@ -182,7 +182,7 @@ fun PlaybackScreen(
                                 when {
                                     right -> { heldDirection = 1; true }
                                     left -> { heldDirection = -1; true }
-                                    center, upDown -> true
+                                    center || upDown -> true
                                     else -> false
                                 }
                             }
