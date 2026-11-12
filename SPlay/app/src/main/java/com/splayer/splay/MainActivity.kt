@@ -143,6 +143,18 @@ private object SPlayLog {
     fun read(context: android.content.Context): String = synchronized(lock) {
         runCatching { File(context.filesDir, "splay-logs.txt").takeIf { it.isFile }?.readText() ?: "Лог пока пуст" }.getOrDefault("Не удалось прочитать лог")
     }
+    fun export(context: android.content.Context): String {
+        val appLog = read(context)
+        val systemLog = try {
+            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "5000"))
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            output.takeLast(1_500_000)
+        } catch (error: Exception) {
+            "Не удалось получить Android logcat: ${error.message}"
+        }
+        return appLog + "\n\n========== ANDROID LOGCAT (last 5000 lines) ==========\n" + systemLog
+    }
     fun clear(context: android.content.Context) {
         synchronized(lock) { runCatching { File(context.filesDir, "splay-logs.txt").writeText("") } }
         add("Log cleared")
@@ -375,7 +387,7 @@ private fun SPlayApp() {
     val artCache = remember { MediaArtCache(context) { path, pipe -> browser.copyToPipe(path, pipe) } }
     val saveLogsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) scope.launch(Dispatchers.IO) {
-            runCatching { context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(SPlayLog.read(context)) } }
+            runCatching { context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(SPlayLog.export(context)) } }
                 .onFailure { SPlayLog.add("Log export failed: ${it.message}") }
         }
     }
@@ -389,8 +401,25 @@ private fun SPlayApp() {
         // Lazy items will request artwork again when they are composed on screen.
     }
 
-    val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800")) }
+    val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1800", "--verbose=2")) }
     val mediaPlayer = remember { MediaPlayer(libVlc) }
+    val settingsFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    DisposableEffect(mediaPlayer) {
+        mediaPlayer.setEventListener { event ->
+            when (event.type) {
+                MediaPlayer.Event.Opening -> SPlayLog.add("VLC event: opening")
+                MediaPlayer.Event.Buffering -> SPlayLog.add("VLC event: buffering ${event.buffering}%")
+                MediaPlayer.Event.Playing -> SPlayLog.add("VLC event: playing")
+                MediaPlayer.Event.Paused -> SPlayLog.add("VLC event: paused")
+                MediaPlayer.Event.Stopped -> SPlayLog.add("VLC event: stopped")
+                MediaPlayer.Event.EndReached -> SPlayLog.add("VLC event: end reached")
+                MediaPlayer.Event.EncounteredError -> SPlayLog.add("VLC ERROR: encountered error")
+                MediaPlayer.Event.Vout -> SPlayLog.add("VLC event: video output count ${event.voutCount}")
+            }
+        }
+        onDispose { mediaPlayer.setEventListener(null) }
+    }
 
     fun refresh(path: String) {
         busy = true
@@ -502,6 +531,8 @@ private fun SPlayApp() {
         val encodedPath = Uri.encode(relative, "/")
         val streamUrl = "smb://${host.trim()}/$encodedShare/$encodedPath"
         try {
+            SPlayLog.add("Playback requested: ${entry.path}; url host=${host.trim()}; video=${isVideo(entry.name)}")
+            try { mediaPlayer.stop() } catch (_: Exception) { }
             val media = Media(libVlc, Uri.parse(streamUrl))
             media.addOption(":network-caching=1800")
             if (username.isNotBlank()) media.addOption(":smb-user=$username")
@@ -516,8 +547,14 @@ private fun SPlayApp() {
             nowPlaying = entry
             controlsVisible = true
             videoMode = isVideo(entry.name)
-            mediaPlayer.play()
-            playbackPlaying = true
+            if (videoMode) {
+                SPlayLog.add("VLC video queued; waiting for video surface before play")
+                playbackPlaying = false
+            } else {
+                SPlayLog.add("VLC audio play invoked")
+                mediaPlayer.play()
+                playbackPlaying = true
+            }
         } catch (e: Exception) {
             SPlayLog.add("VLC playback failed for '${entry.path}': ${e.stackTraceToString()}")
             errorText = "VLC не смог открыть файл: ${e.message ?: "ошибка воспроизведения"}"
@@ -561,9 +598,12 @@ private fun SPlayApp() {
         if (sidebarExpanded) {
             delay(60)
             sidebarFocusRequester.requestFocus()
-        } else if (connected && nowPlaying == null && !showSettings && !showSearch && !busy && entries.isNotEmpty()) {
+        } else if (showSettings) {
+            delay(120)
+            runCatching { settingsFocusRequester.requestFocus() }
+        } else if (connected && nowPlaying == null && !showSearch && !busy && entries.isNotEmpty()) {
             delay(100)
-            contentFocusRequester.requestFocus()
+            runCatching { contentFocusRequester.requestFocus() }
         }
     }
 
@@ -618,19 +658,14 @@ private fun SPlayApp() {
                     Text("SPlay", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(Modifier.width(16.dp))
                     Text(activeArt?.title ?: nowPlaying!!.name, modifier = Modifier.weight(1f), color = Color.LightGray, fontSize = 16.sp, maxLines = 1)
-                    TextButton(onClick = {
-                        mediaPlayer.stop()
-                        try { mediaPlayer.detachViews() } catch (_: Exception) { }
-                        nowPlaying = null
-                        videoMode = false
-                        playbackPlaying = false
-                    }) { Text("Закрыть", color = AccentColor) }
                 }
                 if (videoMode) {
                     AndroidView(factory = { viewContext ->
                         VLCVideoLayout(viewContext).also { layout ->
                             videoLayout = layout
                             mediaPlayer.attachViews(layout, null, false, false)
+                            SPlayLog.add("VLC video surface attached for ${nowPlaying?.path}")
+                            mediaPlayer.play()
                         }
                     }, modifier = Modifier.fillMaxWidth().weight(1f))
                 } else {
@@ -741,8 +776,9 @@ private fun SPlayApp() {
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             listOf("Подключение", "Папки", "Логи").forEach { tab ->
-                                if (settingsTab == tab) Button(onClick = { settingsTab = tab }) { Text(tab) }
-                                else TextButton(onClick = { settingsTab = tab }) { Text(tab, color = AccentColor) }
+                                val tabModifier = if (tab == "Подключение") Modifier.focusRequester(settingsFocusRequester) else Modifier
+                                if (settingsTab == tab) Button(onClick = { settingsTab = tab }, modifier = tabModifier) { Text(tab) }
+                                else TextButton(onClick = { settingsTab = tab }, modifier = tabModifier) { Text(tab, color = AccentColor) }
                             }
                         }
                         Spacer(Modifier.height(12.dp))
