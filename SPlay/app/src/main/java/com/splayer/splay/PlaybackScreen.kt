@@ -1,6 +1,7 @@
 package com.splayer.splay
 
 import android.content.Context
+import android.view.View
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,8 +21,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.*
@@ -85,56 +84,8 @@ fun PlaybackScreen(
             controlsVisible = false
         }
     }
-    LaunchedEffect(Unit) { runCatching { playFocus.requestFocus() } }
 
-    Box(
-        Modifier.fillMaxSize()
-            .background(Color.Black)
-            .onPreviewKeyEvent { event ->
-                val nativeEvent = event.nativeKeyEvent
-                val right = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
-                val left = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
-                val center = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER
-                val upDown = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP || nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
-                when (nativeEvent.action) {
-                    android.view.KeyEvent.ACTION_DOWN -> {
-                        controlsVisible = true
-                        interaction++
-                        when {
-                            right -> { heldDirection = 1; true }
-                            left -> { heldDirection = -1; true }
-                            center -> true
-                            upDown -> true
-                            else -> false
-                        }
-                    }
-                    android.view.KeyEvent.ACTION_UP -> {
-                        when {
-                            right -> {
-                                heldDirection = 0
-                                if (!seekStarted) onNext()
-                                seekStarted = false
-                                true
-                            }
-                            left -> {
-                                heldDirection = 0
-                                if (!seekStarted) onPrevious()
-                                seekStarted = false
-                                true
-                            }
-                            center -> {
-                                controlsVisible = !controlsVisible
-                                interaction++
-                                true
-                            }
-                            upDown -> true
-                            else -> false
-                        }
-                    }
-                    else -> false
-                }
-            }
-    ) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (item.kind == MediaKind.VIDEO) {
             AndroidView(
                 factory = { viewContext ->
@@ -213,6 +164,59 @@ fun PlaybackScreen(
                 }
             }
         }
+
+        AndroidView(
+            factory = { viewContext ->
+                View(viewContext).apply {
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    setOnKeyListener { _, keyCode, event ->
+                        val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                        val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                        val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER
+                        val upDown = keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP || keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                        when (event.action) {
+                            android.view.KeyEvent.ACTION_DOWN -> {
+                                controlsVisible = true
+                                interaction++
+                                when {
+                                    right -> { heldDirection = 1; true }
+                                    left -> { heldDirection = -1; true }
+                                    center, upDown -> true
+                                    else -> false
+                                }
+                            }
+                            android.view.KeyEvent.ACTION_UP -> {
+                                when {
+                                    right -> {
+                                        heldDirection = 0
+                                        if (!seekStarted) onNext()
+                                        seekStarted = false
+                                        true
+                                    }
+                                    left -> {
+                                        heldDirection = 0
+                                        if (!seekStarted) onPrevious()
+                                        seekStarted = false
+                                        true
+                                    }
+                                    center -> {
+                                        controlsVisible = !controlsVisible
+                                        interaction++
+                                        true
+                                    }
+                                    upDown -> true
+                                    else -> false
+                                }
+                            }
+                            else -> false
+                        }
+                    }
+                    requestFocus()
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
