@@ -3,6 +3,7 @@ package com.splayer.splay
 import android.content.Context
 import android.view.View
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -24,6 +25,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,21 +56,18 @@ fun PlaybackScreen(
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
     var position by remember(player) { mutableLongStateOf(0L) }
     var duration by remember(player) { mutableLongStateOf(0L) }
-    var controlsVisible by remember(item.path) { mutableStateOf(false) }
-    var controlsFocused by remember { mutableStateOf(false) }
-    var interaction by remember { mutableIntStateOf(0) }
     var heldDirection by remember { mutableIntStateOf(0) }
-    var seekStarted by remember { mutableStateOf(false) }
+    var seekStarted by remember(item.path) { mutableStateOf(false) }
+    var showVideoProgress by remember(item.path) { mutableStateOf(false) }
     var videoScaleFilled by remember(item.path) { mutableStateOf(false) }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
-    val playFocus = remember { FocusRequester() }
-    val focusModifier = Modifier.onFocusChanged { controlsFocused = it.isFocused }
 
     LaunchedEffect(heldDirection) {
         if (heldDirection != 0) {
             delay(450)
             seekStarted = true
+            if (item.kind == MediaKind.VIDEO) showVideoProgress = true
             while (heldDirection != 0) {
                 val target = if (heldDirection > 0) player.currentPosition + 10_000L else player.currentPosition - 10_000L
                 player.seekTo(target.coerceAtLeast(0L).let { if (player.duration > 0) it.coerceAtMost(player.duration) else it })
@@ -86,13 +86,6 @@ fun PlaybackScreen(
             delay(300)
         }
     }
-    LaunchedEffect(controlsVisible, interaction, controlsFocused) {
-        if (controlsVisible && !controlsFocused) {
-            delay(5_000)
-            if (!controlsFocused) controlsVisible = false
-        }
-    }
-
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (item.kind == MediaKind.VIDEO) {
             AndroidView(
@@ -107,40 +100,25 @@ fun PlaybackScreen(
                         setOnKeyListener { _, keyCode, event ->
                             val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
                             val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
-                            val down = keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
                             val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                                 keyCode == android.view.KeyEvent.KEYCODE_ENTER
                             when (event.action) {
                                 android.view.KeyEvent.ACTION_DOWN -> when {
-                                    down -> {
-                                        controlsVisible = true
-                                        interaction++
-                                        runCatching { playFocus.requestFocus() }
-                                        true
-                                    }
                                     center -> {
-                                        controlsVisible = true
-                                        interaction++
-                                        runCatching { playFocus.requestFocus() }
+                                        if (event.repeatCount > 0) {
+                                            videoScaleFilled = !videoScaleFilled
+                                            resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                        }
                                         true
                                     }
-                                    right -> { controlsVisible = true; heldDirection = 1; true }
-                                    left -> { controlsVisible = true; heldDirection = -1; true }
+                                    right -> { if (event.repeatCount == 0) heldDirection = 1; true }
+                                    left -> { if (event.repeatCount == 0) heldDirection = -1; true }
                                     else -> false
                                 }
                                 android.view.KeyEvent.ACTION_UP -> when {
-                                    right -> {
-                                        heldDirection = 0
-                                        if (!seekStarted) onNext()
-                                        seekStarted = false
-                                        true
-                                    }
-                                    left -> {
-                                        heldDirection = 0
-                                        if (!seekStarted) onPrevious()
-                                        seekStarted = false
-                                        true
-                                    }
+                                    center -> { if (event.repeatCount == 0) { if (player.isPlaying) player.pause() else player.play() }; true }
+                                    right -> { heldDirection = 0; if (!seekStarted) onNext(); true }
+                                    left -> { heldDirection = 0; if (!seekStarted) onPrevious(); true }
                                     else -> false
                                 }
                                 else -> false
@@ -162,36 +140,21 @@ fun PlaybackScreen(
                         isFocusable = true
                         isFocusableInTouchMode = true
                         setOnKeyListener { _, keyCode, event ->
-                            val down = keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
                             val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                                 keyCode == android.view.KeyEvent.KEYCODE_ENTER
                             val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
                             val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
                             when (event.action) {
                                 android.view.KeyEvent.ACTION_DOWN -> when {
-                                    down || center -> {
-                                        controlsVisible = true
-                                        interaction++
-                                        runCatching { playFocus.requestFocus() }
-                                        true
-                                    }
-                                    right -> { controlsVisible = true; heldDirection = 1; true }
-                                    left -> { controlsVisible = true; heldDirection = -1; true }
+                                    center -> true
+                                    right -> { if (event.repeatCount == 0) heldDirection = 1; true }
+                                    left -> { if (event.repeatCount == 0) heldDirection = -1; true }
                                     else -> false
                                 }
                                 android.view.KeyEvent.ACTION_UP -> when {
-                                    right -> {
-                                        heldDirection = 0
-                                        if (!seekStarted) onNext()
-                                        seekStarted = false
-                                        true
-                                    }
-                                    left -> {
-                                        heldDirection = 0
-                                        if (!seekStarted) onPrevious()
-                                        seekStarted = false
-                                        true
-                                    }
+                                    center -> { if (event.repeatCount == 0) { if (player.isPlaying) player.pause() else player.play() }; true }
+                                    right -> { heldDirection = 0; if (!seekStarted) onNext(); true }
+                                    left -> { heldDirection = 0; if (!seekStarted) onPrevious(); true }
                                     else -> false
                                 }
                                 else -> false
@@ -228,88 +191,24 @@ fun PlaybackScreen(
             }
         }
 
-        if (controlsVisible) {
+        if (item.kind == MediaKind.MUSIC || showVideoProgress) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Color(0xE6101216)).padding(horizontal = 28.dp, vertical = 12.dp)
-                    .focusGroup(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .background(Color(0x99000000)).padding(horizontal = 28.dp, vertical = 14.dp)
             ) {
-                if (item.kind == MediaKind.VIDEO) {
-                    Text(item.name, color = Color.White, fontSize = 15.sp, maxLines = 1)
-                    Spacer(Modifier.height(4.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatTime(position), color = Color.White, fontSize = 13.sp)
+                    Text(formatTime(duration), color = Color.White, fontSize = 13.sp)
                 }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlayerIconControl("⤨", "Перемешивание", player.shuffleModeEnabled, playFocus, { controlsFocused = it }) {
-                        player.shuffleModeEnabled = !player.shuffleModeEnabled
-                    }
-                    PlayerIconControl("|◀", "Предыдущий трек или видео", onFocused = { controlsFocused = it }, onClick = onPrevious)
-                    PlayerIconControl(if (playing) "Ⅱ" else "▶", "Пауза или воспроизведение", onFocused = { controlsFocused = it }) {
-                        if (player.isPlaying) player.pause() else player.play()
-                    }
-                    PlayerIconControl("▶|", "Следующий трек или видео", onFocused = { controlsFocused = it }, onClick = onNext)
-                    PlayerIconControl(
-                        if (player.repeatMode == Player.REPEAT_MODE_ONE) "↻¹" else "↻",
-                        "Повтор",
-                        player.repeatMode != Player.REPEAT_MODE_OFF,
-                        onFocused = { controlsFocused = it }
-                    ) {
-                        player.repeatMode = when (player.repeatMode) {
-                            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                            else -> Player.REPEAT_MODE_OFF
-                        }
-                    }
-                    if (item.kind == MediaKind.VIDEO) {
-                        PlayerIconControl(
-                            if (videoScaleFilled) "⛶" else "□",
-                            "Масштаб: вписать или заполнить",
-                            videoScaleFilled,
-                            onFocused = { controlsFocused = it }
-                        ) { videoScaleFilled = !videoScaleFilled }
-                    }
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(formatTime(position), color = Color(0xFFADB5C2), fontSize = 12.sp)
-                    Text(formatTime(duration), color = Color(0xFFADB5C2), fontSize = 12.sp)
+                Spacer(Modifier.height(7.dp))
+                val fraction = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                Canvas(Modifier.fillMaxWidth().height(5.dp)) {
+                    val y = size.height / 2f
+                    drawLine(Color(0xFF737B86), Offset(0f, y), Offset(size.width, y), size.height, cap = StrokeCap.Round)
+                    if (fraction > 0f) drawLine(Color.White, Offset(0f, y), Offset(size.width * fraction, y), size.height, cap = StrokeCap.Round)
                 }
             }
         }
-    }
-}
-
-
-@Composable
-private fun PlayerIconControl(
-    symbol: String,
-    description: String,
-    selected: Boolean = false,
-    focusRequester: FocusRequester? = null,
-    onFocused: (Boolean) -> Unit,
-    onClick: () -> Unit
-) {
-    var focused by remember { mutableStateOf(false) }
-    val controlModifier = Modifier
-        .size(64.dp)
-        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-        .onFocusChanged {
-            focused = it.isFocused
-            onFocused(it.isFocused)
-        }
-        .clickable(onClick = onClick)
-        .focusable()
-    Box(modifier = controlModifier, contentAlignment = Alignment.Center) {
-        Text(
-            text = symbol,
-            color = if (selected || focused) Color.White else Color(0xFFE8E8E8),
-            fontSize = 31.sp,
-            maxLines = 1
-        )
-    }
 }
 
 private fun formatTime(milliseconds: Long): String {
