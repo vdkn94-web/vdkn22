@@ -1,6 +1,7 @@
 package com.splayer.splay
 
 import android.content.Context
+import android.view.TextureView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Canvas
@@ -143,6 +144,7 @@ fun PlaybackScreen(
             AndroidView(
                 factory = { viewContext ->
                     PlayerView(viewContext).apply {
+                        setVideoTextureView(TextureView(viewContext))
                         useController = false
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         this.player = playbackPlayer
