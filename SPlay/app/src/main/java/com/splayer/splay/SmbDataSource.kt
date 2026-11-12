@@ -9,7 +9,6 @@ import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
-import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
@@ -58,9 +57,7 @@ class SmbDataSource(
             client = smbClient
             val smbConnection = smbClient.connect(server)
             connection = smbConnection
-            val smbSession = smbConnection.authenticate(
-                AuthenticationContext(settings.username, settings.password.toCharArray(), "")
-            )
+            val smbSession = smbConnection.authenticate(settings.authenticationContext())
             session = smbSession
             val diskShare = smbSession.connectShare(shareName) as DiskShare
             share = diskShare
@@ -85,7 +82,7 @@ class SmbDataSource(
             transferStarted(dataSpec)
             transferOpen = true
             return bytesRemaining
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             closeResources()
             if (error is IOException) throw error
             throw IOException("Не удалось открыть SMB-файл: ${error.message}", error)
@@ -101,7 +98,11 @@ class SmbDataSource(
         } else {
             minOf(length.toLong(), bytesRemaining).toInt()
         }
-        val count = file.read(buffer, currentPosition, offset, requested)
+        val count = try {
+            file.read(buffer, currentPosition, offset, requested)
+        } catch (error: Exception) {
+            throw IOException("Ошибка чтения SMB-файла", error)
+        }
         if (count < 0) {
             bytesRemaining = 0
             return C.RESULT_END_OF_INPUT

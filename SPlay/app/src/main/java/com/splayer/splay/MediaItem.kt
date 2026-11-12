@@ -1,5 +1,7 @@
 package com.splayer.splay
 
+import com.hierynomus.smbj.auth.AuthenticationContext
+
 enum class MediaKind { VIDEO, MUSIC }
 
 data class MediaItem(
@@ -15,6 +17,9 @@ data class SmbSettings(
     val password: String,
     val folder: String
 ) {
-    fun isConfigured(): Boolean =
-        server.isNotBlank() && share.isNotBlank() && folder.isNotBlank()
+    fun isConfigured(): Boolean = server.isNotBlank() && share.isNotBlank()
+
+    fun authenticationContext(): AuthenticationContext =
+        if (username.isBlank() && password.isBlank()) AuthenticationContext.guest()
+        else AuthenticationContext(username, password.toCharArray(), "")
 }

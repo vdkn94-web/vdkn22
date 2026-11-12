@@ -11,7 +11,6 @@ import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
-import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.share.DiskShare
 import java.io.File
 import java.security.MessageDigest
@@ -47,7 +46,7 @@ class SmbArtworkRepository(context: Context) {
                 retriever.setDataSource(remote)
                 val embedded = retriever.embeddedPicture ?: return@withContext null
                 decodeCover(embedded)
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 SPlayLog.warn("Artwork", "Could not read artwork from $relativePath", error)
                 null
             } finally {
@@ -100,9 +99,7 @@ class SmbArtworkRepository(context: Context) {
             .withSoTimeout(30, TimeUnit.SECONDS)
             .build())
         private val connection = client.connect(settings.server.trim())
-        private val session = connection.authenticate(
-            AuthenticationContext(settings.username, settings.password.toCharArray(), "")
-        )
+        private val session = connection.authenticate(settings.authenticationContext())
         private val share = session.connectShare(settings.share.trim()) as DiskShare
         private val file = share.openFile(
             relativePath.replace('/', '\\').trim('\\'),

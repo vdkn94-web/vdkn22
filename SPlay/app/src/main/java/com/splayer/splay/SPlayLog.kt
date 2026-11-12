@@ -3,6 +3,7 @@ package com.splayer.splay
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.io.OutputStream
 
 object SPlayLog {
     private const val TAG = "SPlay"
@@ -50,6 +51,13 @@ object SPlayLog {
     }
 
     fun file(context: Context): File = File(context.filesDir, "splay-logs.txt")
+
+    fun exportTo(context: Context, output: OutputStream) {
+        synchronized(this) {
+            File(context.filesDir, "splay-logs.previous.txt").takeIf { it.isFile }?.inputStream()?.use { it.copyTo(output) }
+            file(context).takeIf { it.isFile }?.inputStream()?.use { it.copyTo(output) }
+        }
+    }
 }
 
 internal object AppContextHolder {

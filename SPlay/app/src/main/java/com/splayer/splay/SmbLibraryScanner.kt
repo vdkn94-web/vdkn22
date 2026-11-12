@@ -3,7 +3,6 @@ package com.splayer.splay
 import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
-import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.share.DiskShare
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -15,12 +14,14 @@ import java.util.concurrent.TimeUnit
 
 class SmbLibraryScanner {
     private val videoExtensions = setOf(
-        "mkv", "mp4", "avi", "mov", "wmv", "m4v", "mpg", "mpeg",
-        "ts", "m2ts", "mts", "webm", "flv", "3gp", "vob", "ogv"
+        "mkv", "mp4", "avi", "mov", "wmv", "m4v", "mpg", "mpeg", "ts",
+        "m2ts", "mts", "webm", "flv", "3gp", "3g2", "vob", "ogv", "divx",
+        "asf", "rm", "rmvb", "m2v", "mxf", "wtv"
     )
     private val musicExtensions = setOf(
-        "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "wma",
-        "ape", "alac", "aiff", "aif", "mka"
+        "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "wma", "ape",
+        "alac", "aiff", "aif", "aifc", "mka", "mid", "midi", "dsf", "dff",
+        "wv", "tta", "ac3", "eac3", "dts", "amr"
     )
 
     suspend fun scan(
@@ -28,7 +29,7 @@ class SmbLibraryScanner {
         kind: MediaKind,
         onProgress: (visitedFolders: Int, foundFiles: Int) -> Unit
     ): List<MediaItem> = withContext(Dispatchers.IO) {
-        require(settings.isConfigured()) { "Заполните сервер, общую папку и путь сканирования" }
+        require(settings.isConfigured()) { "Заполните сервер и общую папку SMB" }
         val extensions = if (kind == MediaKind.VIDEO) videoExtensions else musicExtensions
         val config = SmbConfig.builder()
             .withTimeout(30, TimeUnit.SECONDS)
@@ -43,8 +44,7 @@ class SmbLibraryScanner {
 
         try {
             client.connect(settings.server.trim()).use { connection ->
-                val auth = AuthenticationContext(settings.username, settings.password.toCharArray(), "")
-                connection.authenticate(auth).use { session ->
+                connection.authenticate(settings.authenticationContext()).use { session ->
                     (session.connectShare(settings.share.trim()) as DiskShare).use { diskShare ->
                         while (folders.isNotEmpty()) {
                             currentCoroutineContext().ensureActive()
@@ -74,7 +74,7 @@ class SmbLibraryScanner {
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             SPlayLog.error("SMB scan", "Scan failed in ${visited.size} folders", error)
             throw error
         } finally {
@@ -95,8 +95,7 @@ class SmbLibraryScanner {
         val client = SMBClient(config)
         try {
             client.connect(settings.server.trim()).use { connection ->
-                val auth = AuthenticationContext(settings.username, settings.password.toCharArray(), "")
-                connection.authenticate(auth).use { session ->
+                connection.authenticate(settings.authenticationContext()).use { session ->
                     (session.connectShare(settings.share.trim()) as DiskShare).use { share ->
                         if (settings.folder.isNotBlank()) {
                             require(share.folderExists(settings.folder.trim().replace('/', '\\'))) {

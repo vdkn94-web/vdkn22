@@ -28,12 +28,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.tv.material3.Button
@@ -80,7 +84,7 @@ class MainActivity : ComponentActivity() {
             val uri = data?.data ?: return
             runCatching {
                 contentResolver.openOutputStream(uri)?.use { output ->
-                    SPlayLog.file(applicationContext).inputStream().use { input -> input.copyTo(output) }
+                    SPlayLog.exportTo(applicationContext, output)
                 }
                 SPlayLog.info("Logs", "Diagnostic log exported")
             }.onFailure { SPlayLog.error("Logs", "Log export failed", it) }
@@ -106,6 +110,9 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     val videoState by viewModel.video.collectAsState()
     val musicState by viewModel.music.collectAsState()
+    val menuFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { runCatching { menuFocus.requestFocus() } }
 
     BackHandler(enabled = activeItem != null || selected != Section.VIDEO) {
         if (activeItem != null) activeItem = null else selected = Section.VIDEO
@@ -123,15 +130,28 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(SmbDataSourceFactory { settings }))
                     .build()
                 exo.setMediaItem(androidx.media3.common.MediaItem.fromUri(SmbMediaUri.create(settings, item.path)))
+                val listener = object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED && queueIndex < queue.lastIndex) {
+                            queueIndex++
+                            activeItem = queue[queueIndex]
+                        }
+                    }
+                    override fun onPlayerError(error: PlaybackException) {
+                        SPlayLog.error("Player", "Playback failed for ${item.path}", error)
+                    }
+                }
+                exo.addListener(listener)
                 exo.prepare()
                 exo.playWhenReady = true
                 player = exo
                 SPlayLog.info("Player", "Opening ${item.path}")
                 onDispose {
+                    exo.removeListener(listener)
                     exo.release()
                     if (player === exo) player = null
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 SPlayLog.error("Player", "Could not create player", error)
                 status = error.message ?: "Не удалось запустить плеер"
                 activeItem = null
@@ -174,7 +194,12 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
             Text("SPLAY", fontSize = 25.sp, color = Color.White)
             Spacer(Modifier.height(12.dp))
             Section.entries.forEach { section ->
-                MenuButton(section, selected == section) { selected = section }
+                MenuButton(
+                    section,
+                    selected == section,
+                    onClick = { selected = section },
+                    focusModifier = if (section == Section.VIDEO) Modifier.focusRequester(menuFocus) else Modifier
+                )
             }
             Spacer(Modifier.weight(1f))
             Text("SPlay 2.0", color = Color(0xFF777E8B), fontSize = 12.sp)
@@ -196,7 +221,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             }
                             Text(
                                 if (videoState.scanning) "Папок: ${videoState.visitedFolders} · Файлов: ${videoState.foundFiles}"
-                                else videoState.message,
+                                else videoState.message.ifBlank { status },
                                 color = Color(0xFFADB5C2),
                                 fontSize = 14.sp
                             )
@@ -257,7 +282,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             "Подключение" -> {
                                 AppInput(server, { server = it }, "Сервер (например, 192.168.1.10)")
                                 AppInput(share, { share = it }, "Общая папка SMB")
-                                AppInput(username, { username = it }, "Логин")
+                                AppInput(username, { username = it }, "Логин (можно Guest)")
                                 AppInput(password, { password = it }, "Пароль", secret = true)
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Button(onClick = {
@@ -276,7 +301,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                                 Text(status, color = Color(0xFFADB5C2), fontSize = 14.sp)
                             }
                             "Папка к файлам" -> {
-                                AppInput(folder, { folder = it }, "Путь внутри общей папки")
+                                AppInput(folder, { folder = it }, "Путь внутри общей папки (пусто — корень)")
                                 Button(onClick = {
                                     SecurePreferences.put("folder", folder)
                                     status = "Папка сканирования сохранена"
@@ -339,11 +364,16 @@ private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick:
 }
 
 @Composable
-private fun MenuButton(section: Section, selected: Boolean, onClick: () -> Unit) {
+private fun MenuButton(
+    section: Section,
+    selected: Boolean,
+    onClick: () -> Unit,
+    focusModifier: Modifier = Modifier
+) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(54.dp).onFocusChanged { focused = it.isFocused },
+        modifier = Modifier.fillMaxWidth().height(54.dp).then(focusModifier).onFocusChanged { focused = it.isFocused },
         shape = RoundedCornerShape(12.dp),
         colors = androidx.tv.material3.SurfaceDefaults.colors(
             containerColor = when {
@@ -368,6 +398,7 @@ private fun AppInput(
     label: String,
     secret: Boolean = false
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Text(label, color = Color(0xFFADB5C2), fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
@@ -379,7 +410,9 @@ private fun AppInput(
             keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else KeyboardType.Text),
             textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF252B34)).padding(14.dp)
+                .background(if (focused) Color(0xFF35445A) else Color(0xFF252B34))
+                .onFocusChanged { focused = it.isFocused }
+                .padding(14.dp)
         )
     }
 }
