@@ -31,7 +31,8 @@ class SmbArtworkRepository(context: Context) {
 
     suspend fun getTrackInfo(settings: SmbSettings, relativePath: String): TrackInfo =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            synchronized(metadataMemory) { metadataMemory.get(relativePath) }?.let { return@withContext it }
+            val metadataKey = "${settings.server}|${settings.share}|$relativePath"
+            synchronized(metadataMemory) { metadataMemory.get(metadataKey) }?.let { return@withContext it }
             val retriever = MediaMetadataRetriever()
             var remote: RemoteArtworkSource? = null
             try {
@@ -45,7 +46,7 @@ class SmbArtworkRepository(context: Context) {
                     ?.takeIf { it.isNotBlank() } ?: "Неизвестный исполнитель"
                 val cover = retriever.embeddedPicture?.let { decodeCover(it) }
                 TrackInfo(title, artist, cover).also {
-                    synchronized(metadataMemory) { metadataMemory.put(relativePath, it) }
+                    synchronized(metadataMemory) { metadataMemory.put(metadataKey, it) }
                 }
             } catch (error: Exception) {
                 SPlayLog.warn("Metadata", "Could not read tags from $relativePath", error)
