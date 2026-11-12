@@ -1,6 +1,7 @@
 package com.splayer.splay
 
 import android.content.Context
+import android.view.LayoutInflater
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Canvas
@@ -142,18 +143,28 @@ fun PlaybackScreen(
         if (item.kind == MediaKind.VIDEO) {
             AndroidView(
                 factory = { viewContext ->
-                    PlayerView(viewContext).apply {
-                        useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    (LayoutInflater.from(viewContext)
+                        .inflate(R.layout.splay_player_view, null, false) as PlayerView).apply {
                         this.player = playbackPlayer
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         keepScreenOn = true
                         isFocusable = false
                         isFocusableInTouchMode = false
                     }
                 },
                 update = {
+                    // Always reset to FIT before applying the requested mode. This prevents
+                    // a stale zoom/crop layout from carrying over to the next media item.
                     it.player = playbackPlayer
-                    it.resizeMode = if (videoScaleFilled) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    it.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    it.post {
+                        it.resizeMode = if (videoScaleFilled) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        } else {
+                            AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
+                        it.requestLayout()
+                    }
                 },
                 modifier = Modifier.fillMaxSize()
             )
