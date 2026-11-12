@@ -4,6 +4,8 @@ import android.content.Context
 import android.view.View
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
@@ -40,7 +43,8 @@ fun PlaybackScreen(
     player: ExoPlayer,
     settings: SmbSettings,
     onPrevious: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onStop: () -> Unit
 ) {
     var trackInfo by remember(item.path) {
         mutableStateOf(TrackInfo(item.name.substringBeforeLast('.'), "Неизвестный исполнитель", null))
@@ -49,9 +53,14 @@ fun PlaybackScreen(
     var position by remember(player) { mutableLongStateOf(0L) }
     var duration by remember(player) { mutableLongStateOf(0L) }
     var controlsVisible by remember(item.path) { mutableStateOf(true) }
+    var controlsFocused by remember { mutableStateOf(false) }
     var interaction by remember { mutableIntStateOf(0) }
     var heldDirection by remember { mutableIntStateOf(0) }
     var seekStarted by remember { mutableStateOf(false) }
+
+    val artworkRepository = remember(context) { SmbArtworkRepository(context) }
+    val playFocus = remember { FocusRequester() }
+    val focusModifier = Modifier.onFocusChanged { controlsFocused = it.isFocused }
 
     LaunchedEffect(heldDirection) {
         if (heldDirection != 0) {
@@ -64,9 +73,6 @@ fun PlaybackScreen(
             }
         }
     }
-    val artworkRepository = remember(context) { SmbArtworkRepository(context) }
-    val playFocus = remember { FocusRequester() }
-
     LaunchedEffect(item.path, item.kind) {
         if (item.kind == MediaKind.MUSIC) trackInfo = artworkRepository.getTrackInfo(settings, item.path)
     }
@@ -78,10 +84,10 @@ fun PlaybackScreen(
             delay(300)
         }
     }
-    LaunchedEffect(controlsVisible, interaction) {
-        if (controlsVisible) {
+    LaunchedEffect(controlsVisible, interaction, controlsFocused) {
+        if (controlsVisible && !controlsFocused) {
             delay(5_000)
-            controlsVisible = false
+            if (!controlsFocused) controlsVisible = false
         }
     }
 
@@ -93,12 +99,103 @@ fun PlaybackScreen(
                         useController = false
                         this.player = player
                         keepScreenOn = true
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        setOnKeyListener { _, keyCode, event ->
+                            val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                            val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                            val down = keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                            val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                                keyCode == android.view.KeyEvent.KEYCODE_ENTER
+                            when (event.action) {
+                                android.view.KeyEvent.ACTION_DOWN -> when {
+                                    down -> {
+                                        controlsVisible = true
+                                        interaction++
+                                        runCatching { playFocus.requestFocus() }
+                                        true
+                                    }
+                                    center -> {
+                                        controlsVisible = true
+                                        interaction++
+                                        runCatching { playFocus.requestFocus() }
+                                        true
+                                    }
+                                    right -> { controlsVisible = true; heldDirection = 1; true }
+                                    left -> { controlsVisible = true; heldDirection = -1; true }
+                                    else -> false
+                                }
+                                android.view.KeyEvent.ACTION_UP -> when {
+                                    right -> {
+                                        heldDirection = 0
+                                        if (!seekStarted) onNext()
+                                        seekStarted = false
+                                        true
+                                    }
+                                    left -> {
+                                        heldDirection = 0
+                                        if (!seekStarted) onPrevious()
+                                        seekStarted = false
+                                        true
+                                    }
+                                    else -> false
+                                }
+                                else -> false
+                            }
+                        }
+                        requestFocus()
                     }
                 },
                 update = { it.player = player },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
+            AndroidView(
+                factory = { viewContext ->
+                    View(viewContext).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        setOnKeyListener { _, keyCode, event ->
+                            val down = keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                            val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                                keyCode == android.view.KeyEvent.KEYCODE_ENTER
+                            val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                            val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                            when (event.action) {
+                                android.view.KeyEvent.ACTION_DOWN -> when {
+                                    down || center -> {
+                                        controlsVisible = true
+                                        interaction++
+                                        runCatching { playFocus.requestFocus() }
+                                        true
+                                    }
+                                    right -> { controlsVisible = true; heldDirection = 1; true }
+                                    left -> { controlsVisible = true; heldDirection = -1; true }
+                                    else -> false
+                                }
+                                android.view.KeyEvent.ACTION_UP -> when {
+                                    right -> {
+                                        heldDirection = 0
+                                        if (!seekStarted) onNext()
+                                        seekStarted = false
+                                        true
+                                    }
+                                    left -> {
+                                        heldDirection = 0
+                                        if (!seekStarted) onPrevious()
+                                        seekStarted = false
+                                        true
+                                    }
+                                    else -> false
+                                }
+                                else -> false
+                            }
+                        }
+                        requestFocus()
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
             Column(
                 Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -106,11 +203,7 @@ fun PlaybackScreen(
             ) {
                 val cover = trackInfo.cover
                 if (cover != null) {
-                    Image(
-                        bitmap = cover.asImageBitmap(),
-                        contentDescription = "Обложка альбома",
-                        modifier = Modifier.size(360.dp)
-                    )
+                    Image(bitmap = cover.asImageBitmap(), contentDescription = "Обложка альбома", modifier = Modifier.size(360.dp))
                 } else {
                     Surface(
                         modifier = Modifier.size(360.dp),
@@ -132,91 +225,60 @@ fun PlaybackScreen(
         if (controlsVisible) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Color(0xE6101216)).padding(horizontal = 24.dp, vertical = 16.dp),
+                    .background(Color(0xE6101216)).padding(horizontal = 28.dp, vertical = 12.dp)
+                    .focusGroup(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (item.kind == MediaKind.VIDEO) {
-                    Text(item.name, color = Color.White, fontSize = 16.sp)
-                    Spacer(Modifier.height(8.dp))
+                    Text(item.name, color = Color.White, fontSize = 15.sp, maxLines = 1)
+                    Spacer(Modifier.height(4.dp))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(formatTime(position), color = Color(0xFFADB5C2), fontSize = 13.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = onStop, modifier = focusModifier.focusRequester(playFocus)) {
+                        Text("■", color = Color.White, fontSize = 30.sp)
+                    }
+                    Button(onClick = { player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L)) }, modifier = focusModifier) {
+                        Text("◀◀", color = Color.White, fontSize = 27.sp)
+                    }
+                    Button(onClick = { if (player.isPlaying) player.pause() else player.play() }, modifier = focusModifier) {
+                        Text(if (playing) "Ⅱ" else "▶", color = Color.White, fontSize = 30.sp)
+                    }
+                    Button(onClick = { player.seekTo((player.currentPosition + 10_000L).coerceAtMost(if (duration > 0) duration else Long.MAX_VALUE)) }, modifier = focusModifier) {
+                        Text("▶▶", color = Color.White, fontSize = 27.sp)
+                    }
+                    Button(onClick = { player.volume = (player.volume + 0.1f).coerceAtMost(1f) }, modifier = focusModifier) {
+                        Text("◖))", color = Color.White, fontSize = 25.sp)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = onPrevious, modifier = focusModifier) {
+                        Text("|◀", color = Color.White, fontSize = 27.sp)
+                    }
+                    Button(onClick = { if (player.isPlaying) player.pause() else player.play() }, modifier = focusModifier) {
+                        Text("Ⅱ", color = Color.White, fontSize = 30.sp)
+                    }
+                    Button(onClick = onNext, modifier = focusModifier) {
+                        Text("▶|", color = Color.White, fontSize = 27.sp)
+                    }
                     Button(onClick = {
                         player.repeatMode = when (player.repeatMode) {
                             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                             else -> Player.REPEAT_MODE_OFF
                         }
-                    }) { Text("⇄") }
-                    Button(onClick = { player.shuffleModeEnabled = !player.shuffleModeEnabled }) {
-                        Text(if (player.shuffleModeEnabled) "⤨" else "⇄")
+                    }, modifier = focusModifier) {
+                        Text(if (player.repeatMode == Player.REPEAT_MODE_OFF) "↻" else "↻¹", color = Color.White, fontSize = 30.sp)
                     }
-                    Button(onClick = onPrevious) { Text("◀|") }
-                    Button(
-                        onClick = { if (player.isPlaying) player.pause() else player.play() },
-                        modifier = Modifier.focusRequester(playFocus)
-                    ) { Text(if (playing) "Ⅱ" else "▶") }
-                    Button(onClick = onNext) { Text("|▶") }
-                    Button(onClick = {
-                        player.repeatMode = if (player.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
-                    }) { Text(if (player.repeatMode == Player.REPEAT_MODE_ONE) "↻¹" else "↻") }
-                    Text(formatTime(duration), color = Color(0xFFADB5C2), fontSize = 13.sp)
+                    Button(onClick = { player.shuffleModeEnabled = !player.shuffleModeEnabled }, modifier = focusModifier) {
+                        Text("⤨", color = Color.White, fontSize = 30.sp)
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatTime(position), color = Color(0xFFADB5C2), fontSize = 12.sp)
+                    Text(formatTime(duration), color = Color(0xFFADB5C2), fontSize = 12.sp)
                 }
             }
         }
-
-        AndroidView(
-            factory = { viewContext ->
-                View(viewContext).apply {
-                    isFocusable = true
-                    isFocusableInTouchMode = true
-                    setOnKeyListener { _, keyCode, event ->
-                        val right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
-                        val left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
-                        val center = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER
-                        val upDown = keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP || keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
-                        when (event.action) {
-                            android.view.KeyEvent.ACTION_DOWN -> {
-                                controlsVisible = true
-                                interaction++
-                                when {
-                                    right -> { heldDirection = 1; true }
-                                    left -> { heldDirection = -1; true }
-                                    center || upDown -> true
-                                    else -> false
-                                }
-                            }
-                            android.view.KeyEvent.ACTION_UP -> {
-                                when {
-                                    right -> {
-                                        heldDirection = 0
-                                        if (!seekStarted) onNext()
-                                        seekStarted = false
-                                        true
-                                    }
-                                    left -> {
-                                        heldDirection = 0
-                                        if (!seekStarted) onPrevious()
-                                        seekStarted = false
-                                        true
-                                    }
-                                    center -> {
-                                        controlsVisible = !controlsVisible
-                                        interaction++
-                                        true
-                                    }
-                                    upDown -> true
-                                    else -> false
-                                }
-                            }
-                            else -> false
-                        }
-                    }
-                    requestFocus()
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
     }
 }
 
