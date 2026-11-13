@@ -67,7 +67,7 @@ fun PlaybackScreen(
     var duration by remember(player) { mutableLongStateOf(0L) }
     var heldDirection by remember { mutableIntStateOf(0) }
     var seekStarted by remember(item.path) { mutableStateOf(false) }
-    var showVideoProgress by remember(item.path) { mutableStateOf(false) }
+    var showVideoOverlay by remember(item.path) { mutableStateOf(false) }
     var videoScaleFilled by remember(item.path) { mutableStateOf(false) }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
@@ -80,7 +80,7 @@ fun PlaybackScreen(
         if (heldDirection != 0) {
             delay(450)
             seekStarted = true
-            if (item.kind == MediaKind.VIDEO) showVideoProgress = true
+            if (item.kind == MediaKind.VIDEO) showVideoOverlay = true
             while (heldDirection != 0) {
                 val target = if (heldDirection > 0) player.currentPosition + 10_000L else player.currentPosition - 10_000L
                 player.seekTo(target.coerceAtLeast(0L).let { if (player.duration > 0) it.coerceAtMost(player.duration) else it })
@@ -88,8 +88,16 @@ fun PlaybackScreen(
             }
         } else if (seekStarted) {
             delay(1800)
-            showVideoProgress = false
             seekStarted = false
+        }
+    }
+    LaunchedEffect(item.path) {
+        if (item.kind == MediaKind.VIDEO) showVideoOverlay = true
+    }
+    LaunchedEffect(showVideoOverlay, heldDirection, item.path) {
+        if (showVideoOverlay && heldDirection == 0 && item.kind == MediaKind.VIDEO) {
+            delay(3000)
+            showVideoOverlay = false
         }
     }
     LaunchedEffect(item.path, item.kind) {
@@ -130,6 +138,7 @@ fun PlaybackScreen(
                     center && event.type == KeyEventType.KeyUp -> {
                         val heldMs = (android.os.SystemClock.uptimeMillis() - centerDownAt).coerceAtLeast(0L)
                         centerDownAt = 0L
+                        if (item.kind == MediaKind.VIDEO) showVideoOverlay = true
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
                             videoScaleFilled = !videoScaleFilled
                             SPlayLog.info("VideoScale", "Long OK path=${item.path} heldMs=$heldMs target=${if (videoScaleFilled) "ZOOM" else "FIT"}")
@@ -213,7 +222,7 @@ fun PlaybackScreen(
             }
         }
 
-        if (item.kind == MediaKind.MUSIC || showVideoProgress || (item.kind == MediaKind.VIDEO && paused)) {
+        if (item.kind == MediaKind.MUSIC || (item.kind == MediaKind.VIDEO && showVideoOverlay)) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Color(0xCC080A0D)).padding(
@@ -221,7 +230,7 @@ fun PlaybackScreen(
                         vertical = if (item.kind == MediaKind.VIDEO) 22.dp else 14.dp
                     )
             ) {
-                if (item.kind == MediaKind.VIDEO && paused) {
+                if (item.kind == MediaKind.VIDEO) {
                     Text(
                         item.name,
                         color = Color.White,
