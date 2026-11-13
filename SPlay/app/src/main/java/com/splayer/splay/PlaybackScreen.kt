@@ -56,6 +56,8 @@ fun PlaybackScreen(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     upcomingItems: List<MediaItem> = emptyList(),
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onStop: () -> Unit
 ) {
     var trackInfo by remember(item.path) {
@@ -137,7 +139,12 @@ fun PlaybackScreen(
                 val center = event.key == Key.DirectionCenter || event.key == Key.Enter
                 val right = event.key == Key.DirectionRight
                 val left = event.key == Key.DirectionLeft
+                val up = event.key == Key.DirectionUp
                 when {
+                    up && event.type == KeyEventType.KeyUp -> {
+                        onToggleFavorite()
+                        true
+                    }
                     center && event.type == KeyEventType.KeyDown -> {
                         if (centerDownAt == 0L) centerDownAt = android.os.SystemClock.uptimeMillis()
                         true
@@ -242,7 +249,7 @@ fun PlaybackScreen(
             ) {
                 if (item.kind == MediaKind.VIDEO) {
                     Text(
-                        item.name,
+                        item.name.substringBeforeLast('.', item.name),
                         color = Color.White,
                         fontSize = 28.sp,
                         maxLines = 1,
