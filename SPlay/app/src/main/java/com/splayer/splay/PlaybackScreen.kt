@@ -68,6 +68,7 @@ fun PlaybackScreen(
     var heldDirection by remember { mutableIntStateOf(0) }
     var seekStarted by remember(item.path) { mutableStateOf(false) }
     var showVideoOverlay by remember(item.path) { mutableStateOf(false) }
+    var videoOverlayEvent by remember(item.path) { mutableIntStateOf(0) }
     var videoScaleFilled by remember(item.path) { mutableStateOf(false) }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
@@ -80,7 +81,10 @@ fun PlaybackScreen(
         if (heldDirection != 0) {
             delay(450)
             seekStarted = true
-            if (item.kind == MediaKind.VIDEO) showVideoOverlay = true
+            if (item.kind == MediaKind.VIDEO) {
+                showVideoOverlay = true
+                videoOverlayEvent++
+            }
             while (heldDirection != 0) {
                 val target = if (heldDirection > 0) player.currentPosition + 10_000L else player.currentPosition - 10_000L
                 player.seekTo(target.coerceAtLeast(0L).let { if (player.duration > 0) it.coerceAtMost(player.duration) else it })
@@ -92,9 +96,12 @@ fun PlaybackScreen(
         }
     }
     LaunchedEffect(item.path) {
-        if (item.kind == MediaKind.VIDEO) showVideoOverlay = true
+        if (item.kind == MediaKind.VIDEO) {
+            showVideoOverlay = true
+            videoOverlayEvent++
+        }
     }
-    LaunchedEffect(showVideoOverlay, heldDirection, item.path) {
+    LaunchedEffect(videoOverlayEvent, heldDirection, item.path) {
         if (showVideoOverlay && heldDirection == 0 && item.kind == MediaKind.VIDEO) {
             delay(3000)
             showVideoOverlay = false
