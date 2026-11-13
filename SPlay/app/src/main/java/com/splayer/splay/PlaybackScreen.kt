@@ -18,10 +18,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -79,6 +83,12 @@ fun PlaybackScreen(
     var queueVisible by remember { mutableStateOf(false) }
     var selectedQueueIndex by remember(item.path, queueItems) {
         mutableIntStateOf(queueItems.indexOfFirst { it.path == item.path }.coerceAtLeast(0))
+    }
+    val queueListState = rememberLazyListState()
+    LaunchedEffect(queueVisible, selectedQueueIndex, queueItems.size) {
+        if (queueVisible && queueItems.isNotEmpty()) {
+            queueListState.animateScrollToItem(selectedQueueIndex.coerceIn(0, queueItems.lastIndex))
+        }
     }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
@@ -282,31 +292,35 @@ fun PlaybackScreen(
             ) {
                 Text("Очередь воспроизведения", color = Color.White, fontSize = 21.sp)
                 Text("Вниз / Вверх — выбрать · OK — включить · Назад — закрыть", color = Color(0xFFADB5C2), fontSize = 12.sp)
-                queueItems.take(9).forEachIndexed { index, queueItem ->
-                    Row(
-                        Modifier.fillMaxWidth().background(
-                            if (index == selectedQueueIndex) Color(0xFF315B87) else Color.Transparent,
-                            RoundedCornerShape(8.dp)
-                        ).padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            if (queueItem.path == item.path) "▶" else "${index + 1}.",
-                            color = if (queueItem.path == item.path) Color(0xFFFF6B86) else Color(0xFFADB5C2),
-                            fontSize = 14.sp
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            queueItem.name.let { if (queueItem.kind == MediaKind.VIDEO) it.substringBeforeLast('.', it) else it },
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f)
-                        )
+                LazyColumn(
+                    state = queueListState,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(queueItems, key = { it.path }) { queueItem ->
+                        val index = queueItems.indexOf(queueItem)
+                        Row(
+                            Modifier.fillMaxWidth().background(
+                                if (index == selectedQueueIndex) Color(0xFF315B87) else Color.Transparent,
+                                RoundedCornerShape(8.dp)
+                            ).padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (queueItem.path == item.path) "▶" else "${index + 1}.",
+                                color = if (queueItem.path == item.path) Color(0xFFFF6B86) else Color(0xFFADB5C2),
+                                fontSize = 14.sp
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                queueItem.name.let { if (queueItem.kind == MediaKind.VIDEO) it.substringBeforeLast('.', it) else it },
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                }
-                if (queueItems.size > 9) {
-                    Text("И ещё ${queueItems.size - 9} файлов", color = Color(0xFFADB5C2), fontSize = 12.sp)
                 }
             }
         }
