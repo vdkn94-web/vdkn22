@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,8 @@ fun PlaybackScreen(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     upcomingItems: List<MediaItem> = emptyList(),
+    queueItems: List<MediaItem> = emptyList(),
+    onSelectQueueItem: (MediaItem) -> Unit = {},
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
     onStop: () -> Unit
@@ -73,6 +76,10 @@ fun PlaybackScreen(
     var showVideoOverlay by remember(item.path) { mutableStateOf(false) }
     var videoOverlayEvent by remember(item.path) { mutableIntStateOf(0) }
     var videoScaleFilled by remember(item.path) { mutableStateOf(false) }
+    var queueVisible by remember { mutableStateOf(false) }
+    var selectedQueueIndex by remember(item.path, queueItems) {
+        mutableIntStateOf(queueItems.indexOfFirst { it.path == item.path }.coerceAtLeast(0))
+    }
 
     val artworkRepository = remember(context) { SmbArtworkRepository(context) }
     val playbackPlayer = player
@@ -141,9 +148,34 @@ fun PlaybackScreen(
                 val right = event.key == Key.DirectionRight
                 val left = event.key == Key.DirectionLeft
                 val up = event.key == Key.DirectionUp
+                val down = event.key == Key.DirectionDown
+                val back = event.key == Key.Back || event.key == Key.Escape
                 when {
+                    back && event.type == KeyEventType.KeyUp && queueVisible -> {
+                        queueVisible = false
+                        true
+                    }
+                    down && event.type == KeyEventType.KeyUp -> {
+                        if (queueVisible) {
+                            selectedQueueIndex = (selectedQueueIndex + 1).coerceAtMost(queueItems.lastIndex.coerceAtLeast(0))
+                        } else if (queueItems.isNotEmpty()) {
+                            selectedQueueIndex = queueItems.indexOfFirst { it.path == item.path }.coerceAtLeast(0)
+                            queueVisible = true
+                        }
+                        true
+                    }
+                    up && event.type == KeyEventType.KeyUp && queueVisible -> {
+                        selectedQueueIndex = (selectedQueueIndex - 1).coerceAtLeast(0)
+                        true
+                    }
                     up && event.type == KeyEventType.KeyUp -> {
                         onToggleFavorite()
+                        true
+                    }
+                    center && event.type == KeyEventType.KeyDown && queueVisible -> true
+                    center && event.type == KeyEventType.KeyUp && queueVisible -> {
+                        queueItems.getOrNull(selectedQueueIndex)?.let(onSelectQueueItem)
+                        queueVisible = false
                         true
                     }
                     center && event.type == KeyEventType.KeyDown -> {
@@ -236,6 +268,44 @@ fun PlaybackScreen(
                         Spacer(Modifier.height(14.dp))
                         Text(trackInfo.title, color = Color.White, fontSize = 30.sp, maxLines = 1, modifier = Modifier.fillMaxWidth().basicMarquee())
                     }
+                }
+            }
+        }
+
+        if (queueVisible) {
+            Column(
+                Modifier.align(Alignment.CenterEnd).padding(28.dp).width(420.dp)
+                    .background(Color(0xF21A1F27), RoundedCornerShape(18.dp))
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Очередь воспроизведения", color = Color.White, fontSize = 21.sp)
+                Text("Вниз / Вверх — выбрать · OK — включить · Назад — закрыть", color = Color(0xFFADB5C2), fontSize = 12.sp)
+                queueItems.take(9).forEachIndexed { index, queueItem ->
+                    Row(
+                        Modifier.fillMaxWidth().background(
+                            if (index == selectedQueueIndex) Color(0xFF315B87) else Color.Transparent,
+                            RoundedCornerShape(8.dp)
+                        ).padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (queueItem.path == item.path) "▶" else "${index + 1}.",
+                            color = if (queueItem.path == item.path) Color(0xFFFF6B86) else Color(0xFFADB5C2),
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            queueItem.name.let { if (queueItem.kind == MediaKind.VIDEO) it.substringBeforeLast('.', it) else it },
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                if (queueItems.size > 9) {
+                    Text("И ещё ${queueItems.size - 9} файлов", color = Color(0xFFADB5C2), fontSize = 12.sp)
                 }
             }
         }
