@@ -142,13 +142,26 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                 exo.setMediaItem(androidx.media3.common.MediaItem.fromUri(SmbMediaUri.create(settings, item.path)))
                 val listener = object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        SPlayLog.info("PlayerState", "path=${item.path} state=$playbackState ready=${exo.playWhenReady} playing=${exo.isPlaying} position=${exo.currentPosition} duration=${exo.duration}")
                         if (playbackState == Player.STATE_ENDED && queueIndex < queue.lastIndex) {
                             queueIndex++
                             activeItem = queue[queueIndex]
                         }
                     }
                     override fun onPlayerError(error: PlaybackException) {
-                        SPlayLog.error("Player", "Playback failed for ${item.path}", error)
+                        SPlayLog.error("Player", "Playback failed for ${item.path}; code=${error.errorCode} name=${error.errorCodeName}", error)
+                    }
+                    override fun onIsLoadingChanged(isLoading: Boolean) {
+                        SPlayLog.debug("PlayerState", "path=${item.path} loading=$isLoading buffered=${exo.bufferedPosition} totalBuffered=${exo.totalBufferedDuration}")
+                    }
+                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                        SPlayLog.info("VideoSize", "path=${item.path} size=${videoSize.width}x${videoSize.height} pixelRatio=${videoSize.pixelWidthHeightRatio} rotation=${videoSize.unappliedRotationDegrees}")
+                    }
+                    override fun onRenderedFirstFrame() {
+                        SPlayLog.info("Player", "First video frame rendered path=${item.path}")
+                    }
+                    override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                        SPlayLog.info("Player", "Media transition path=${item.path} reason=$reason uri=${mediaItem?.localConfiguration?.uri}")
                     }
                 }
                 exo.addListener(listener)
@@ -156,7 +169,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                 exo.prepare()
                 exo.playWhenReady = true
                 player = exo
-                SPlayLog.info("Player", "Opening ${item.path}")
+                SPlayLog.info("Player", "Opening ${item.path}; kind=${item.kind}; queueIndex=$queueIndex queueSize=${queue.size}; shuffle=${exo.shuffleModeEnabled}")
                 onDispose {
                     exo.removeListener(listener)
                     exo.release()
@@ -180,12 +193,14 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
             player = player!!,
             settings = currentSettings,
             onPrevious = {
+                SPlayLog.info("Queue", "Previous requested index=$queueIndex size=${queue.size}")
                 if (queueIndex > 0) {
                     queueIndex--
                     activeItem = queue[queueIndex]
                 }
             },
             onNext = {
+                SPlayLog.info("Queue", "Next requested index=$queueIndex size=${queue.size}")
                 if (queueIndex < queue.lastIndex) {
                     queueIndex++
                     activeItem = queue[queueIndex]
