@@ -261,7 +261,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             fontSize = 14.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        MediaList(displayedVideoItems, "Видео пока не найдены") { item ->
+                        MediaList(displayedVideoItems, "Видео пока не найдены", hideVideoExtensions = true) { item ->
                             queue = listOf(item) + displayedVideoItems.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
@@ -373,7 +373,12 @@ private fun saveConnection(server: String, share: String, username: String, pass
 }
 
 @Composable
-private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick: (MediaItem) -> Unit) {
+private fun MediaList(
+    items: List<MediaItem>,
+    emptyMessage: String,
+    hideVideoExtensions: Boolean = false,
+    onItemClick: (MediaItem) -> Unit
+) {
     if (items.isEmpty()) {
         Text(emptyMessage, color = Color(0xFF8F98A6), fontSize = 15.sp)
     } else {
@@ -397,7 +402,11 @@ private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick:
                     ) {
                         Text(if (item.kind == MediaKind.VIDEO) "▶" else "♫", color = if (focused) Color.White else Color(0xFF93B9E2))
                         Spacer(Modifier.width(12.dp))
-                        Text(item.name, color = Color.White, fontSize = 15.sp)
+                        Text(
+                            if (hideVideoExtensions && item.kind == MediaKind.VIDEO) item.name.substringBeforeLast('.', item.name) else item.name,
+                            color = Color.White,
+                            fontSize = 15.sp
+                        )
                     }
                 }
             }
