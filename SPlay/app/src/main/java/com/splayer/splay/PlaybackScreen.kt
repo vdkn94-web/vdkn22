@@ -27,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
@@ -244,7 +245,7 @@ fun PlaybackScreen(
                 .background(Color(0xAA080A0D), RoundedCornerShape(24.dp))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Text(if (isFavorite) "♥" else "♡", color = if (isFavorite) Color(0xFFFF5C7A) else Color(0xFFB7C0CC), fontSize = 30.sp)
+            FavoriteHeart(isFavorite = isFavorite, onClick = {}, modifier = Modifier.size(34.dp))
         }
 
         if (item.kind == MediaKind.MUSIC || (item.kind == MediaKind.VIDEO && showVideoOverlay)) {
@@ -271,10 +272,17 @@ fun PlaybackScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 val fraction = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                Canvas(Modifier.fillMaxWidth().height(if (item.kind == MediaKind.VIDEO) 6.dp else 5.dp)) {
-                    val y = size.height / 2f
-                    drawLine(Color(0xFF737B86), Offset(0f, y), Offset(size.width, y), size.height, cap = StrokeCap.Round)
-                    if (fraction > 0f) drawLine(Color.White, Offset(0f, y), Offset(size.width * fraction, y), size.height, cap = StrokeCap.Round)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Canvas(Modifier.weight(1f).height(if (item.kind == MediaKind.VIDEO) 6.dp else 5.dp)) {
+                        val y = size.height / 2f
+                        drawLine(Color(0xFF737B86), Offset(0f, y), Offset(size.width, y), size.height, cap = StrokeCap.Round)
+                        if (fraction > 0f) drawLine(Color.White, Offset(0f, y), Offset(size.width * fraction, y), size.height, cap = StrokeCap.Round)
+                    }
+                    FavoriteHeart(
+                        isFavorite = isFavorite,
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.padding(start = 16.dp).size(30.dp)
+                    )
                 }
             }
         }
@@ -289,4 +297,30 @@ private fun formatTime(milliseconds: Long): String {
     val seconds = totalSeconds % 60
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
     else "%02d:%02d".format(minutes, seconds)
+}
+
+
+@Composable
+fun FavoriteHeart(
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier.clickable(onClick = onClick).focusable()) {
+        val w = size.width
+        val h = size.height
+        val heart = Path().apply {
+            moveTo(w * 0.5f, h * 0.9f)
+            cubicTo(w * 0.42f, h * 0.82f, w * 0.08f, h * 0.55f, w * 0.08f, h * 0.32f)
+            cubicTo(w * 0.08f, h * 0.08f, w * 0.36f, h * 0.02f, w * 0.5f, h * 0.25f)
+            cubicTo(w * 0.64f, h * 0.02f, w * 0.92f, h * 0.08f, w * 0.92f, h * 0.32f)
+            cubicTo(w * 0.92f, h * 0.55f, w * 0.58f, h * 0.82f, w * 0.5f, h * 0.9f)
+            close()
+        }
+        if (isFavorite) {
+            drawPath(heart, Color(0xFFFF3158))
+        } else {
+            drawPath(heart, Color(0xFFE5EAF0), style = androidx.compose.ui.graphics.drawscope.Stroke(width = (w * 0.085f).coerceAtLeast(1.8f)))
+        }
+    }
 }
