@@ -55,7 +55,7 @@ private enum class Section(val title: String, val icon: String) {
     VIDEO("Видео", "▶"),
     MUSIC("Музыка", "♫"),
     SEARCH("Поиск", "⌕"),
-    FAVORITES("Избранное", "♥"),
+    FAVORITES("Избранное", "♡"),
     SETTINGS("Настройки", "⚙")
 }
 
