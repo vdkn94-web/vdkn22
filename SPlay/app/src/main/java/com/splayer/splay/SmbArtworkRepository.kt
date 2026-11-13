@@ -16,6 +16,10 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.math.max
 
 data class TrackInfo(val title: String, val artist: String, val cover: Bitmap?)
@@ -26,13 +30,17 @@ class SmbArtworkRepository(context: Context) {
     private val memory = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 12L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
-    private val metadataMemory = LruCache<String, TrackInfo>(64)
+    private val metadataMemory get() = sharedMetadataMemory
 
 
     suspend fun getTrackInfo(settings: SmbSettings, relativePath: String): TrackInfo =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val metadataKey = "${settings.server}|${settings.share}|$relativePath"
-            synchronized(metadataMemory) { metadataMemory.get(metadataKey) }?.let { return@withContext it }
+            val metadataKey = "${settings.server.trim().lowercase()}|${settings.share.trim().lowercase()}|${settings.username.trim().lowercase()}|$relativePath"
+            synchronized(metadataMemory) { metadataMemory.get(metadataKey) }?.let {
+                SPlayLog.debug("MetadataCache", "HIT path=$relativePath title=${it.title} cover=${it.cover != null}")
+                return@withContext it
+            }
+            SPlayLog.info("MetadataCache", "MISS path=$relativePath; reading tags from SMB")
             val retriever = MediaMetadataRetriever()
             var remote: RemoteArtworkSource? = null
             try {
@@ -47,6 +55,7 @@ class SmbArtworkRepository(context: Context) {
                 val cover = retriever.embeddedPicture?.let { decodeCover(it) }
                 TrackInfo(title, artist, cover).also {
                     synchronized(metadataMemory) { metadataMemory.put(metadataKey, it) }
+                    SPlayLog.info("Metadata", "Loaded path=$relativePath title=$title artist=$artist cover=${cover != null}")
                 }
             } catch (error: Exception) {
                 SPlayLog.warn("Metadata", "Could not read tags from $relativePath", error)
@@ -58,6 +67,20 @@ class SmbArtworkRepository(context: Context) {
                 runCatching { remote?.close() }
             }
         }
+
+    fun prefetch(settings: SmbSettings, paths: List<String>) {
+        val distinct = paths.distinct().take(2)
+        if (distinct.isEmpty()) return
+        SPlayLog.info("Prefetch", "Scheduled ${distinct.size} upcoming tracks: ${distinct.joinToString()}")
+        prefetchScope.launch {
+            distinct.forEachIndexed { index, path ->
+                val started = System.currentTimeMillis()
+                runCatching { getTrackInfo(settings, path) }
+                    .onSuccess { SPlayLog.info("Prefetch", "Track ${index + 1}/${distinct.size} ready path=$path cover=${it.cover != null} elapsedMs=${System.currentTimeMillis() - started}") }
+                    .onFailure { SPlayLog.error("Prefetch", "Track prefetch failed path=$path", it) }
+            }
+        }
+    }
 
     suspend fun get(settings: SmbSettings, relativePath: String): Bitmap? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -163,6 +186,8 @@ class SmbArtworkRepository(context: Context) {
     }
 
     companion object {
+        private val sharedMetadataMemory = LruCache<String, TrackInfo>(128)
+        private val prefetchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private const val MAX_DISK_CACHE = 160L * 1024L * 1024L
     }
 }
