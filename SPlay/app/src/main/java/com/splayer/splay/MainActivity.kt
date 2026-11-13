@@ -116,9 +116,18 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     val videoState by viewModel.video.collectAsState()
     val musicState by viewModel.music.collectAsState()
+    var displayedVideoItems by remember { mutableStateOf(emptyList<MediaItem>()) }
+    var displayedMusicItems by remember { mutableStateOf(emptyList<MediaItem>()) }
     val menuFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) { runCatching { menuFocus.requestFocus() } }
+
+    LaunchedEffect(selected, videoState.items) {
+        if (selected == Section.VIDEO) displayedVideoItems = videoState.items.shuffled()
+    }
+    LaunchedEffect(selected, musicState.items) {
+        if (selected == Section.MUSIC) displayedMusicItems = musicState.items.shuffled()
+    }
 
     BackHandler(enabled = activeItem != null || selected != Section.VIDEO) {
         if (activeItem != null) activeItem = null else selected = Section.VIDEO
@@ -165,7 +174,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                     }
                 }
                 exo.addListener(listener)
-                exo.shuffleModeEnabled = true
+                exo.shuffleModeEnabled = false
                 exo.prepare()
                 exo.playWhenReady = true
                 player = exo
@@ -252,8 +261,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             fontSize = 14.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        MediaList(videoState.items, "Видео пока не найдены") { item ->
-                            queue = listOf(item) + videoState.items.filterNot { it.path == item.path }.shuffled()
+                        MediaList(displayedVideoItems, "Видео пока не найдены") { item ->
+                            queue = listOf(item) + displayedVideoItems.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
                         }
@@ -268,8 +277,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             fontSize = 14.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        MediaList(musicState.items, "Музыкальные треки пока не найдены") { item ->
-                            queue = listOf(item) + musicState.items.filterNot { it.path == item.path }.shuffled()
+                        MediaList(displayedMusicItems, "Музыкальные треки пока не найдены") { item ->
+                            queue = listOf(item) + displayedMusicItems.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
                         }
@@ -282,7 +291,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             it.name.contains(search, ignoreCase = true)
                         }
                         MediaList(found, "Ничего не найдено") { item ->
-                            queue = listOf(item) + found.filterNot { it.path == item.path }.shuffled()
+                            queue = listOf(item) + found.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
                         }
@@ -365,25 +374,15 @@ private fun saveConnection(server: String, share: String, username: String, pass
 
 @Composable
 private fun MediaList(items: List<MediaItem>, emptyMessage: String, onItemClick: (MediaItem) -> Unit) {
-    var displayedItems by remember(items) { mutableStateOf(items) }
-
     if (items.isEmpty()) {
         Text(emptyMessage, color = Color(0xFF8F98A6), fontSize = 15.sp)
     } else {
         Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(onClick = { displayedItems = items.shuffled() }) {
-                    Text("Перемешать список")
-                }
-            }
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                items(displayedItems, key = { it.path }) { item ->
+                items(items, key = { it.path }) { item ->
                     var focused by remember(item.path) { mutableStateOf(false) }
                     Row(
                         Modifier.fillMaxWidth().height(52.dp)
