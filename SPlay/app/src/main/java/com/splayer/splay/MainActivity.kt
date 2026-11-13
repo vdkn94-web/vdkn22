@@ -321,7 +321,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                         val found = (videoState.items + musicState.items).filter {
                             it.name.contains(search, ignoreCase = true)
                         }
-                        MediaList(found, "Ничего не найдено") { item ->
+                        MediaList(found, "Ничего не найдено", hideVideoExtensions = true) { item ->
                             queue = listOf(item) + found.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
