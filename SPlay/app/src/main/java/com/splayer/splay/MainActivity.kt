@@ -223,6 +223,14 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                 }
             },
             upcomingItems = queue.drop(queueIndex + 1).take(2),
+            queueItems = queue,
+            onSelectQueueItem = { selectedItem ->
+                val selectedIndex = queue.indexOfFirst { it.path == selectedItem.path }
+                if (selectedIndex >= 0) {
+                    queueIndex = selectedIndex
+                    activeItem = selectedItem
+                }
+            },
             isFavorite = activeItem!!.path in favoritePaths,
             onToggleFavorite = { toggleFavorite(activeItem!!) },
             onStop = { activeItem = null }
