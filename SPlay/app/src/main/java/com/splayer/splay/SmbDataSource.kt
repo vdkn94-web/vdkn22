@@ -36,6 +36,9 @@ class SmbDataSource(
     private var currentPosition = 0L
     private var bytesRemaining = C.LENGTH_UNSET.toLong()
     private var transferOpen = false
+    private var totalBytesRead = 0L
+    private var readOperations = 0L
+    private var firstReadLogged = false
     private val readAhead = ByteArray(READ_AHEAD_BYTES)
     private var readAheadOffset = 0
     private var readAheadLength = 0
@@ -87,8 +90,13 @@ class SmbDataSource(
             currentUri = uri
             transferStarted(dataSpec)
             transferOpen = true
+            totalBytesRead = 0L
+            readOperations = 0L
+            firstReadLogged = false
+            SPlayLog.info("SMBStream", "OPEN server=$server share=$shareName path=$path offset=${dataSpec.position} length=${dataSpec.length} fileLength=$fileLength remaining=$bytesRemaining")
             return bytesRemaining
         } catch (error: Exception) {
+            SPlayLog.error("SMBStream", "OPEN FAILED uri=$uri", error)
             closeResources()
             if (error is IOException) throw error
             throw IOException("Не удалось открыть SMB-файл: ${error.message}", error)
@@ -109,6 +117,7 @@ class SmbDataSource(
             val count = try {
                 file.read(readAhead, currentPosition, 0, requested)
             } catch (error: Exception) {
+                SPlayLog.error("SMBStream", "READ FAILED uri=$currentUri position=$currentPosition", error)
                 throw IOException("Ошибка чтения SMB-файла", error)
             }
             if (count <= 0) {
@@ -116,6 +125,11 @@ class SmbDataSource(
                 return C.RESULT_END_OF_INPUT
             }
             currentPosition += count
+            readOperations++
+            if (!firstReadLogged) {
+                firstReadLogged = true
+                SPlayLog.debug("SMBStream", "FIRST READ uri=$currentUri bytes=$count position=$currentPosition")
+            }
             readAheadOffset = 0
             readAheadLength = count
         }
@@ -126,6 +140,7 @@ class SmbDataSource(
         readAheadOffset += copied
         if (bytesRemaining != C.LENGTH_UNSET.toLong()) bytesRemaining -= copied
         bytesTransferred(copied)
+        totalBytesRead += copied
         return copied
     }
 
@@ -133,6 +148,7 @@ class SmbDataSource(
 
     override fun close() {
         currentUri = null
+        if (transferOpen) SPlayLog.info("SMBStream", "CLOSE uri=$currentUri bytesRead=$totalBytesRead smbReadOps=$readOperations")
         closeResources()
         readAheadOffset = 0
         readAheadLength = 0
