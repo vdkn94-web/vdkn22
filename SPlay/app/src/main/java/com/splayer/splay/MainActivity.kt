@@ -489,7 +489,11 @@ private fun MenuButton(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(section.icon, color = Color.White, fontSize = 22.sp)
+        if (section == Section.FAVORITES) {
+            FavoriteHeart(isFavorite = false, onClick = {}, modifier = Modifier.size(22.dp), interactive = false)
+        } else {
+            Text(section.icon, color = Color.White, fontSize = 22.sp)
+        }
         Spacer(Modifier.width(14.dp))
         Text(section.title, color = Color.White, fontSize = 17.sp)
     }
