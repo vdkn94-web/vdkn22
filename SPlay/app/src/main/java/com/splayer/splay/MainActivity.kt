@@ -443,11 +443,10 @@ private fun MediaList(
                             maxLines = 1
                         )
                         if (onFavoriteClick != null) {
-                            Text(
-                                if (item.path in favoritePaths) "♥" else "♡",
-                                color = if (item.path in favoritePaths) Color(0xFFFF5C7A) else Color(0xFF9AA6B5),
-                                fontSize = 25.sp,
-                                modifier = Modifier.padding(start = 12.dp).clickable { onFavoriteClick(item) }.focusable()
+                            FavoriteHeart(
+                                isFavorite = item.path in favoritePaths,
+                                onClick = { onFavoriteClick(item) },
+                                modifier = Modifier.padding(start = 12.dp).size(25.dp)
                             )
                         }
                     }
