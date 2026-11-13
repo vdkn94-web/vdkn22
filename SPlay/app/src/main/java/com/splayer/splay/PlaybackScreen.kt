@@ -240,14 +240,6 @@ fun PlaybackScreen(
             }
         }
 
-        Box(
-            Modifier.align(Alignment.TopEnd).padding(24.dp)
-                .background(Color(0xAA080A0D), RoundedCornerShape(24.dp))
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            FavoriteHeart(isFavorite = isFavorite, onClick = {}, modifier = Modifier.size(34.dp))
-        }
-
         if (item.kind == MediaKind.MUSIC || (item.kind == MediaKind.VIDEO && showVideoOverlay)) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -280,7 +272,8 @@ fun PlaybackScreen(
                     }
                     FavoriteHeart(
                         isFavorite = isFavorite,
-                        onClick = onToggleFavorite,
+                        onClick = {},
+                        interactive = false,
                         modifier = Modifier.padding(start = 16.dp).size(30.dp)
                     )
                 }
@@ -304,9 +297,11 @@ private fun formatTime(milliseconds: Long): String {
 fun FavoriteHeart(
     isFavorite: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    interactive: Boolean = true
 ) {
-    Canvas(modifier.clickable(onClick = onClick).focusable()) {
+    val heartModifier = if (interactive) modifier.clickable(onClick = onClick).focusable() else modifier
+    Canvas(heartModifier) {
         val w = size.width
         val h = size.height
         val heart = Path().apply {
