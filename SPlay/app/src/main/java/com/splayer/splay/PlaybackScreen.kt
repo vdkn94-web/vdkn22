@@ -92,16 +92,18 @@ fun PlaybackScreen(
         }
     }
     LaunchedEffect(item.path, item.kind) {
-        if (item.kind == MediaKind.MUSIC) trackInfo = artworkRepository.getTrackInfo(settings, item.path)
+        SPlayLog.info("PlaybackUI", "Screen bound path=${item.path} kind=${item.kind}")
+        if (item.kind == MediaKind.MUSIC) {
+            val started = android.os.SystemClock.elapsedRealtime()
+            trackInfo = artworkRepository.getTrackInfo(settings, item.path)
+            SPlayLog.info("PlaybackUI", "Current metadata ready path=${item.path} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
+        }
     }
     LaunchedEffect(item.path, upcomingItems) {
         if (item.kind == MediaKind.MUSIC) {
-            upcomingItems.asSequence()
-                .filter { it.kind == MediaKind.MUSIC && it.path != item.path }
-                .take(2)
-                .forEach { next ->
-                    runCatching { artworkRepository.getTrackInfo(settings, next.path) }
-                }
+            val next = upcomingItems.filter { it.kind == MediaKind.MUSIC && it.path != item.path }.take(2)
+            SPlayLog.info("Prefetch", "Queue current=${item.path}; next=${next.joinToString { it.path }}")
+            artworkRepository.prefetch(settings, next.map { it.path })
         }
     }
     LaunchedEffect(player) {
@@ -128,6 +130,7 @@ fun PlaybackScreen(
                         centerDownAt = 0L
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
                             videoScaleFilled = !videoScaleFilled
+                            SPlayLog.info("VideoScale", "Long OK path=${item.path} heldMs=$heldMs target=${if (videoScaleFilled) "ZOOM" else "FIT"}")
                         } else if (heldMs < 500L) {
                             if (player.isPlaying) player.pause() else player.play()
                         }
@@ -171,6 +174,7 @@ fun PlaybackScreen(
                         AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                     it.requestLayout()
+                    SPlayLog.debug("VideoScale", "Applied path=${item.path} mode=${if (videoScaleFilled) "ZOOM" else "FIT"} size=${playbackPlayer.videoSize.width}x${playbackPlayer.videoSize.height} ratio=${playbackPlayer.videoSize.pixelWidthHeightRatio}")
                 },
                 modifier = Modifier.fillMaxSize()
             )
