@@ -16,6 +16,8 @@ object SecurePreferences {
     private fun prefs() = AppContextHolder.context!!.getSharedPreferences(PREFS, 0)
 
     fun get(key: String): String = prefs().getString(key, "") ?: ""
+    fun getFavorites(): Set<String> = prefs().getStringSet("favorite_paths", emptySet())?.toSet() ?: emptySet()
+    fun putFavorites(paths: Set<String>) { prefs().edit().putStringSet("favorite_paths", paths.toSet()).apply() }
     fun put(key: String, value: String) { prefs().edit().putString(key, value.trim()).apply() }
 
     fun putSecret(key: String, value: String) {
