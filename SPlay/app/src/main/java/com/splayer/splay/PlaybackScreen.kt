@@ -284,41 +284,44 @@ fun PlaybackScreen(
         }
 
         if (queueVisible) {
-            Column(
-                Modifier.align(Alignment.CenterEnd).padding(28.dp).width(420.dp)
-                    .background(Color(0xF21A1F27), RoundedCornerShape(18.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Очередь воспроизведения", color = Color.White, fontSize = 21.sp)
-                Text("Вниз / Вверх — выбрать · OK — включить · Назад — закрыть", color = Color(0xFFADB5C2), fontSize = 12.sp)
-                LazyColumn(
-                    state = queueListState,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier.align(Alignment.CenterEnd).padding(28.dp).width(420.dp)
+                        .heightIn(max = maxHeight - 56.dp)
+                        .background(Color(0xF21A1F27), RoundedCornerShape(18.dp))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(queueItems, key = { it.path }) { queueItem ->
-                        val index = queueItems.indexOf(queueItem)
-                        Row(
-                            Modifier.fillMaxWidth().background(
-                                if (index == selectedQueueIndex) Color(0xFF315B87) else Color.Transparent,
-                                RoundedCornerShape(8.dp)
-                            ).padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                if (queueItem.path == item.path) "▶" else "${index + 1}.",
-                                color = if (queueItem.path == item.path) Color(0xFFFF6B86) else Color(0xFFADB5C2),
-                                fontSize = 14.sp
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                queueItem.name.let { if (queueItem.kind == MediaKind.VIDEO) it.substringBeforeLast('.', it) else it },
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f)
-                            )
+                    Text("Очередь воспроизведения", color = Color.White, fontSize = 21.sp)
+                    Text("Вниз / Вверх — выбрать · OK — включить · Назад — закрыть", color = Color(0xFFADB5C2), fontSize = 12.sp)
+                    LazyColumn(
+                        state = queueListState,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(queueItems, key = { it.path }) { queueItem ->
+                            val index = queueItems.indexOf(queueItem)
+                            Row(
+                                Modifier.fillMaxWidth().background(
+                                    if (index == selectedQueueIndex) Color(0xFF315B87) else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                ).padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    if (queueItem.path == item.path) "▶" else "${index + 1}.",
+                                    color = if (queueItem.path == item.path) Color(0xFFFF6B86) else Color(0xFFADB5C2),
+                                    fontSize = 14.sp
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    queueItem.name.let { if (queueItem.kind == MediaKind.VIDEO) it.substringBeforeLast('.', it) else it },
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
