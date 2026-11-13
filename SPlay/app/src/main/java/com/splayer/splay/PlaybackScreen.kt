@@ -145,7 +145,10 @@ fun PlaybackScreen(
                     center && event.type == KeyEventType.KeyUp -> {
                         val heldMs = (android.os.SystemClock.uptimeMillis() - centerDownAt).coerceAtLeast(0L)
                         centerDownAt = 0L
-                        if (item.kind == MediaKind.VIDEO) showVideoOverlay = true
+                        if (item.kind == MediaKind.VIDEO) {
+                            showVideoOverlay = true
+                            videoOverlayEvent++
+                        }
                         if (item.kind == MediaKind.VIDEO && heldMs >= 500L) {
                             videoScaleFilled = !videoScaleFilled
                             SPlayLog.info("VideoScale", "Long OK path=${item.path} heldMs=$heldMs target=${if (videoScaleFilled) "ZOOM" else "FIT"}")
