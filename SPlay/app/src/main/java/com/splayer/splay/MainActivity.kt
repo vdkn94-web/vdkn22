@@ -54,6 +54,7 @@ private enum class Section(val title: String, val icon: String) {
     VIDEO("Видео", "▶"),
     MUSIC("Музыка", "♫"),
     SEARCH("Поиск", "⌕"),
+    FAVORITES("Избранное", "♥"),
     SETTINGS("Настройки", "⚙")
 }
 
@@ -118,6 +119,12 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
     val musicState by viewModel.music.collectAsState()
     var displayedVideoItems by remember { mutableStateOf(emptyList<MediaItem>()) }
     var displayedMusicItems by remember { mutableStateOf(emptyList<MediaItem>()) }
+    var favoritePaths by remember { mutableStateOf(SecurePreferences.getFavorites()) }
+    var favoritesTab by remember { mutableStateOf(MediaKind.VIDEO) }
+    val toggleFavorite: (MediaItem) -> Unit = { item ->
+        favoritePaths = if (item.path in favoritePaths) favoritePaths - item.path else favoritePaths + item.path
+        SecurePreferences.putFavorites(favoritePaths)
+    }
     val menuFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) { runCatching { menuFocus.requestFocus() } }
@@ -216,6 +223,8 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                 }
             },
             upcomingItems = queue.drop(queueIndex + 1).take(2),
+            isFavorite = activeItem!!.path in favoritePaths,
+            onToggleFavorite = { toggleFavorite(activeItem!!) },
             onStop = { activeItem = null }
         )
         }
@@ -261,7 +270,7 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             fontSize = 14.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        MediaList(displayedVideoItems, "Видео пока не найдены", hideVideoExtensions = true) { item ->
+                        MediaList(displayedVideoItems, "Видео пока не найдены", hideVideoExtensions = true, favoritePaths = favoritePaths, onFavoriteClick = toggleFavorite) { item ->
                             queue = listOf(item) + displayedVideoItems.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
@@ -277,8 +286,30 @@ private fun SPlayApp(viewModel: MediaLibraryViewModel, onExportLogs: () -> Unit)
                             fontSize = 14.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        MediaList(displayedMusicItems, "Музыкальные треки пока не найдены") { item ->
+                        MediaList(displayedMusicItems, "Музыкальные треки пока не найдены", favoritePaths = favoritePaths, onFavoriteClick = toggleFavorite) { item ->
                             queue = listOf(item) + displayedMusicItems.filterNot { it.path == item.path }
+                            queueIndex = 0
+                            activeItem = item
+                        }
+                    }
+                    Section.FAVORITES -> {
+                        Text("Избранное", fontSize = 30.sp, color = Color.White)
+                        Spacer(Modifier.height(14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = { favoritesTab = MediaKind.VIDEO }) { Text(if (favoritesTab == MediaKind.VIDEO) "♥  Видео" else "Видео") }
+                            Button(onClick = { favoritesTab = MediaKind.MUSIC }) { Text(if (favoritesTab == MediaKind.MUSIC) "♥  Музыка" else "Музыка") }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        val favoriteItems = (if (favoritesTab == MediaKind.VIDEO) videoState.items else musicState.items)
+                            .filter { it.path in favoritePaths }
+                        MediaList(
+                            favoriteItems,
+                            if (favoritesTab == MediaKind.VIDEO) "В избранном пока нет видео" else "В избранном пока нет музыки",
+                            hideVideoExtensions = favoritesTab == MediaKind.VIDEO,
+                            favoritePaths = favoritePaths,
+                            onFavoriteClick = toggleFavorite
+                        ) { item ->
+                            queue = listOf(item) + favoriteItems.filterNot { it.path == item.path }
                             queueIndex = 0
                             activeItem = item
                         }
@@ -377,6 +408,8 @@ private fun MediaList(
     items: List<MediaItem>,
     emptyMessage: String,
     hideVideoExtensions: Boolean = false,
+    favoritePaths: Set<String> = emptySet(),
+    onFavoriteClick: ((MediaItem) -> Unit)? = null,
     onItemClick: (MediaItem) -> Unit
 ) {
     if (items.isEmpty()) {
@@ -405,8 +438,18 @@ private fun MediaList(
                         Text(
                             if (hideVideoExtensions && item.kind == MediaKind.VIDEO) item.name.substringBeforeLast('.', item.name) else item.name,
                             color = Color.White,
-                            fontSize = 15.sp
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1
                         )
+                        if (onFavoriteClick != null) {
+                            Text(
+                                if (item.path in favoritePaths) "♥" else "♡",
+                                color = if (item.path in favoritePaths) Color(0xFFFF5C7A) else Color(0xFF9AA6B5),
+                                fontSize = 25.sp,
+                                modifier = Modifier.padding(start = 12.dp).clickable { onFavoriteClick(item) }.focusable()
+                            )
+                        }
                     }
                 }
             }
