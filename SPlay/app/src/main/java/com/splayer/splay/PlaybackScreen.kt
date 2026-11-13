@@ -239,6 +239,14 @@ fun PlaybackScreen(
             }
         }
 
+        Box(
+            Modifier.align(Alignment.TopEnd).padding(24.dp)
+                .background(Color(0xAA080A0D), RoundedCornerShape(24.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(if (isFavorite) "♥" else "♡", color = if (isFavorite) Color(0xFFFF5C7A) else Color(0xFFB7C0CC), fontSize = 30.sp)
+        }
+
         if (item.kind == MediaKind.MUSIC || (item.kind == MediaKind.VIDEO && showVideoOverlay)) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
