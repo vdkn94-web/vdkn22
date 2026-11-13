@@ -197,6 +197,7 @@ fun PlaybackScreen(
                         }
                         true
                     }
+                    (right || left) && queueVisible -> true
                     (right || left) && event.type == KeyEventType.KeyDown -> {
                         heldDirection = if (right) 1 else -1
                         true
