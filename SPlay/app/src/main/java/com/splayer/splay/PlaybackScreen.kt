@@ -62,6 +62,7 @@ fun PlaybackScreen(
         mutableStateOf(TrackInfo(item.name.substringBeforeLast('.'), "Неизвестный исполнитель", null))
     }
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
+    var paused by remember(player) { mutableStateOf(!player.playWhenReady) }
     var position by remember(player) { mutableLongStateOf(0L) }
     var duration by remember(player) { mutableLongStateOf(0L) }
     var heldDirection by remember { mutableIntStateOf(0) }
@@ -109,6 +110,7 @@ fun PlaybackScreen(
     LaunchedEffect(player) {
         while (true) {
             playing = player.isPlaying
+            paused = !player.playWhenReady && player.playbackState != Player.STATE_IDLE
             position = player.currentPosition.coerceAtLeast(0L)
             duration = player.duration.coerceAtLeast(0L)
             delay(300)
@@ -211,18 +213,31 @@ fun PlaybackScreen(
             }
         }
 
-        if (item.kind == MediaKind.MUSIC || showVideoProgress) {
+        if (item.kind == MediaKind.MUSIC || showVideoProgress || (item.kind == MediaKind.VIDEO && paused)) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Color(0x99000000)).padding(horizontal = 28.dp, vertical = 14.dp)
+                    .background(Color(0xCC080A0D)).padding(
+                        horizontal = if (item.kind == MediaKind.VIDEO) 36.dp else 28.dp,
+                        vertical = if (item.kind == MediaKind.VIDEO) 22.dp else 14.dp
+                    )
             ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(formatTime(position), color = Color.White, fontSize = 13.sp)
-                    Text(formatTime(duration), color = Color.White, fontSize = 13.sp)
+                if (item.kind == MediaKind.VIDEO && paused) {
+                    Text(
+                        item.name,
+                        color = Color.White,
+                        fontSize = 28.sp,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth().basicMarquee()
+                    )
+                    Spacer(Modifier.height(12.dp))
                 }
-                Spacer(Modifier.height(7.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatTime(position), color = Color.White, fontSize = if (item.kind == MediaKind.VIDEO) 16.sp else 13.sp)
+                    Text(formatTime(duration), color = Color.White, fontSize = if (item.kind == MediaKind.VIDEO) 16.sp else 13.sp)
+                }
+                Spacer(Modifier.height(8.dp))
                 val fraction = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                Canvas(Modifier.fillMaxWidth().height(5.dp)) {
+                Canvas(Modifier.fillMaxWidth().height(if (item.kind == MediaKind.VIDEO) 6.dp else 5.dp)) {
                     val y = size.height / 2f
                     drawLine(Color(0xFF737B86), Offset(0f, y), Offset(size.width, y), size.height, cap = StrokeCap.Round)
                     if (fraction > 0f) drawLine(Color.White, Offset(0f, y), Offset(size.width * fraction, y), size.height, cap = StrokeCap.Round)
