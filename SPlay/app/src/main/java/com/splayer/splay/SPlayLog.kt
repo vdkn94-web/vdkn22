@@ -44,6 +44,7 @@ object SPlayLog {
         }
     }
 
+    fun debug(area: String, message: String, context: Context? = null) = write("D", area, message, null, context)
     fun info(area: String, message: String, context: Context? = null) = write("I", area, message, null, context)
     fun warn(area: String, message: String, error: Throwable? = null, context: Context? = null) = write("W", area, message, error, context)
     fun error(area: String, message: String, error: Throwable? = null, context: Context? = null) = write("E", area, message, error, context)
@@ -68,6 +69,7 @@ object SPlayLog {
         when (level) {
             "E" -> Log.e(TAG, line, error)
             "W" -> Log.w(TAG, line, error)
+            "D" -> Log.d(TAG, line)
             else -> Log.i(TAG, line)
         }
     }
